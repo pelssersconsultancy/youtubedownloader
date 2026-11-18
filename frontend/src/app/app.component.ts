@@ -77,7 +77,7 @@ const API = '/api';
   template: `
     <div class="layout">
       <aside class="sidebar" aria-label="Hoofdnavigatie">
-        <div class="brand">{{ t('Survival library', 'Overlevingsbibliotheek') }}</div>
+        <div class="brand">{{ t('Survival library', 'Overlevings Bibliotheek') }}</div>
         <button
           type="button"
           class="nav-item"
@@ -257,8 +257,9 @@ const API = '/api';
               <i></i><b></b><em></em><span></span>
             </div>
             <div class="hero-index">
-              <span>{{ t('LIBRARY INDEX', 'COLLECTIE-INDEX') }}</span
-              ><strong>{{ totalVideos() }}</strong
+              <span>{{ t('LIBRARY INDEX', 'COLLECTIE-INDEX') }}</span><strong>{{
+                totalVideos()
+              }}</strong
               ><small>{{ t('VIDEOS', 'VIDEO’S') }}</small>
             </div>
           </section>
@@ -541,8 +542,9 @@ const API = '/api';
                         height="68"
                       />
                       <div class="sync-info">
-                        <strong>{{ video.title }}</strong
-                        ><span>{{ t('Queued', 'In wachtrij') }}</span>
+                        <strong>{{ video.title }}</strong><span>{{
+                          t('Queued', 'In wachtrij')
+                        }}</span>
                       </div>
                     </article>
                   }
