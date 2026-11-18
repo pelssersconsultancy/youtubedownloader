@@ -533,10 +533,13 @@ const API = '/api';
     .channel-item strong { font-size: 13px; font-weight: 600; }
     .channel-item small { color: #71819d; font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
     .suggestions-page > p { color: #8d9db7; font-size: 13px; }
-    .suggestion-section { margin-top: 28px; }
-    .suggestion-section > h2 { margin: 0 0 16px; padding-bottom: 10px; border-bottom: 1px solid rgba(72, 217, 255, .2); color: #eaf6ff; font-size: 21px; }
-    .suggestion-subsection { margin: 20px 0 0 12px; }
-    .suggestion-subsection > h3 { margin: 0 0 10px; color: #a8c2df; font-size: 15px; font-weight: 550; }
+    .suggestion-section { margin-top: 26px; padding: 16px; border: 1px solid rgba(72, 217, 255, .2); border-radius: 14px;
+      background: linear-gradient(145deg, rgba(18, 44, 70, .48), rgba(13, 20, 38, .64)); box-shadow: 0 12px 34px rgba(0, 0, 0, .12); }
+    .suggestion-section > h2 { margin: 0 0 18px; padding: 12px 15px; border-left: 4px solid #48d9ff; border-radius: 7px;
+      background: linear-gradient(90deg, rgba(44, 151, 190, .2), rgba(24, 83, 126, .07)); color: #7ce7ff; font-size: 21px; letter-spacing: .01em; }
+    .suggestion-subsection { margin: 18px 0 0 10px; padding-left: 14px; border-left: 2px solid rgba(182, 124, 255, .5); }
+    .suggestion-subsection > h3 { margin: 0 0 10px; padding: 9px 13px; border: 1px solid rgba(182, 124, 255, .2); border-radius: 8px;
+      background: linear-gradient(90deg, rgba(106, 62, 155, .24), rgba(58, 39, 93, .12)); color: #d8bcff; font-size: 14px; font-weight: 600; }
     .suggestion-list { display: grid; gap: 8px; }
     .suggestion-item { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(90px, 150px) auto; gap: 14px; align-items: center;
       padding: 13px 15px; border: 1px solid rgba(129, 164, 220, .12); border-radius: 10px; background: rgba(16, 24, 43, .78); }
@@ -603,7 +606,8 @@ const API = '/api';
       .setting-field select { max-width: 100%; }
       .sync-controls { align-items: flex-start; flex-direction: column; }
       .suggestion-section > h2 { font-size: 18px; }
-      .suggestion-subsection { margin-left: 4px; }
+      .suggestion-section { padding: 12px 9px; }
+      .suggestion-subsection { margin-left: 4px; padding-left: 9px; }
       .suggestion-item { grid-template-columns: minmax(0, 1fr); }
       .suggestion-link, .suggestion-item button { grid-column: auto; grid-row: auto; }
     }
