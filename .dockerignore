@@ -1,0 +1,9 @@
+.git
+.env
+**/node_modules
+**/dist
+**/.angular
+docker-data
+downloads
+cookies.txt
+**/*.log

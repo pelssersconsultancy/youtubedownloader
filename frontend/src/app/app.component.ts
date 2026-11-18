@@ -6,6 +6,7 @@ import { EMPTY, catchError, interval, startWith, switchMap } from 'rxjs';
 interface Video { id: string; title: string; thumbnail: string; duration: number | null; keywords: string[]; }
 interface Settings { downloadDir: string | null; maxParallelDownloads: number; cookiesBrowser: string; syncEnabled: boolean; language: 'en' | 'nl'; }
 interface Channel { url: string; title: string; addedAt: string; autoSync: boolean; }
+interface Suggestion { title: string; url: string; categories: string[]; }
 interface VideoPage { items: Video[]; total: number; offset: number; hasMore: boolean; scanning?: boolean; }
 interface SyncVideo { id: string; title: string; thumbnail: string; progress: number; }
 interface ChannelSyncProgress extends Channel {
@@ -32,7 +33,8 @@ const API = '/api';
       <aside class="sidebar" aria-label="Hoofdnavigatie">
         <div class="brand">{{ t('Video library', 'Video bibliotheek') }}</div>
         <button type="button" class="nav-item" [class.active]="page() === 'overview'" (click)="openPage('overview')">▦ <span>{{ t('Overview', 'Overzicht') }}</span></button>
-        <button type="button" class="nav-item" [class.active]="page() === 'channels'" (click)="openPage('channels')">▤ <span>{{ t('Channels', 'Kanalen') }}</span></button>
+        <button type="button" class="nav-item" [class.active]="page() === 'channels'" (click)="openPage('channels')">▤ <span>{{ t('My Channels', 'Mijn kanalen') }}</span></button>
+        <button type="button" class="nav-item" [class.active]="page() === 'suggestions'" (click)="openPage('suggestions')">✧ <span>{{ t('Suggestions', 'Suggesties') }}</span></button>
         <button type="button" class="nav-item" [class.active]="page() === 'sync-progress'" (click)="openPage('sync-progress')">◴ <span>{{ t('Sync progress', 'Syncvoortgang') }}</span></button>
       </aside>
       <main>
@@ -40,7 +42,7 @@ const API = '/api';
           @if (page() === 'sync-progress') {
             <div class="title-tools"><h1>{{ t('Sync progress', 'Syncvoortgang') }}</h1><button type="button" class="log-link" (click)="openFailureLog()">{{ t('Failure log', 'Faallog') }}</button></div>
           } @else {
-            <h1>{{ page() === 'overview' ? t('Overview', 'Overzicht') : page() === 'channels' ? t('Channels', 'Kanalen') : selectedChannel()?.title ?? t('Channel', 'Kanaal') }}</h1>
+            <h1>{{ page() === 'overview' ? t('Overview', 'Overzicht') : page() === 'channels' ? t('My Channels', 'Mijn kanalen') : page() === 'suggestions' ? t('Suggestions', 'Suggesties') : selectedChannel()?.title ?? t('Channel', 'Kanaal') }}</h1>
           }
           @if (state().dir) { <p class="dir">{{ t('Saving to', 'Opslaan in') }} {{ state().dir }}</p> }
           <button type="button" class="settings" [attr.aria-label]="t('Open settings', 'Instellingen openen')" [attr.title]="t('Settings', 'Instellingen')" (click)="settingsOpen.set(!settingsOpen())">⚙</button>
@@ -146,6 +148,32 @@ const API = '/api';
                 @if (!addingChannel()) { <li class="empty">{{ t('You have not bookmarked any channels yet.', 'Je hebt nog geen kanalen gebookmarkt.') }}</li> }
               }
             </ul>
+          </section>
+        } @else if (page() === 'suggestions') {
+          <section class="suggestions-page">
+            <p>{{ t('Browse verified YouTube channels from the self-reliance skills guide. Add a channel to My Channels to bookmark it; auto-sync remains off until you enable it there.', 'Bekijk gecontroleerde YouTube-kanalen uit de gids voor zelfredzaamheid. Voeg een kanaal toe aan Mijn kanalen om het te bewaren; auto-sync blijft uit totdat je die daar aanzet.') }}</p>
+            <div class="bar tools">
+              <input type="search" [placeholder]="t('Search suggested channels', 'Zoek voorgestelde kanalen')"
+                     [value]="suggestionQuery()" (input)="suggestionQuery.set($any($event.target).value)" />
+            </div>
+            @if (suggestionsLoading()) { <p class="count">{{ t('Loading suggestions…', 'Suggesties laden…') }}</p> }
+            <div class="suggestion-list">
+              @for (suggestion of filteredSuggestions(); track suggestion.url) {
+                <article class="suggestion-item">
+                  <div class="suggestion-info">
+                    <h2>{{ suggestion.title }}</h2>
+                    <p>{{ suggestion.categories.join(' · ') }}</p>
+                  </div>
+                  <a class="suggestion-link" [href]="suggestion.url" target="_blank" rel="noopener noreferrer">YouTube ↗</a>
+                  <button type="button" [disabled]="isSuggestionAdded(suggestion) || addingSuggestionUrl() !== null"
+                          (click)="addSuggestedChannel(suggestion)">
+                    {{ isSuggestionAdded(suggestion) ? t('Added to My Channels', 'Toegevoegd aan Mijn kanalen') : addingSuggestionUrl() === suggestion.url ? t('Adding…', 'Toevoegen…') : t('Add to my Channels', 'Toevoegen aan Mijn kanalen') }}
+                  </button>
+                </article>
+              } @empty {
+                @if (!suggestionsLoading()) { <p class="empty">{{ t('No matching suggestions.', 'Geen passende suggesties.') }}</p> }
+              }
+            </div>
           </section>
         } @else if (page() === 'sync-progress') {
           <section class="sync-progress-page" aria-live="polite">
@@ -399,6 +427,8 @@ const API = '/api';
       .video-card .dur { display: block; }
       .video-card { gap: 10px; }
       .badge { grid-column: 2; text-align: left; }
+      .suggestion-item { grid-template-columns: minmax(0, 1fr); }
+      .suggestion-link, .suggestion-item button { grid-column: auto; grid-row: auto; }
     }
 
     :host {
@@ -493,6 +523,15 @@ const API = '/api';
     .channel-main:hover { background: rgba(72, 217, 255, .055); }
     .channel-item strong { font-size: 13px; font-weight: 600; }
     .channel-item small { color: #71819d; font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .suggestions-page > p { color: #8d9db7; font-size: 13px; }
+    .suggestion-list { display: grid; gap: 9px; margin-top: 18px; }
+    .suggestion-item { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(120px, 220px) auto; gap: 16px; align-items: center;
+      padding: 13px 15px; border: 1px solid rgba(129, 164, 220, .12); border-radius: 10px; background: rgba(16, 24, 43, .78); }
+    .suggestion-info { min-width: 0; }
+    .suggestion-info h2 { margin: 0; font-size: 14px; font-weight: 600; }
+    .suggestion-info p { margin: 4px 0 0; color: #8191ad; font-size: 11px; }
+    .suggestion-link { color: #73dfff; font-size: 12px; text-decoration: none; }
+    .suggestion-link:hover { text-decoration: underline; }
     .channel-progress-card { padding: 20px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(135deg, rgba(17, 26, 47, .94), rgba(13, 19, 36, .88)); box-shadow: 0 15px 40px rgba(0,0,0,.15); }
     .channel-progress-heading h2 { font-size: 16px; font-weight: 600; }
     .channel-progress-heading > span { color: #61ddfa; text-shadow: 0 0 15px rgba(72, 217, 255, .3); }
@@ -551,6 +590,9 @@ const API = '/api';
       .setting-field { align-items: flex-start; flex-direction: column; gap: 6px; }
       .setting-field select { max-width: 100%; }
       .sync-controls { align-items: flex-start; flex-direction: column; }
+      .suggestion-item { grid-template-columns: 1fr auto; }
+      .suggestion-link { grid-column: 1; }
+      .suggestion-item button { grid-column: 2; grid-row: 1 / span 2; }
     }
   `],
 })
@@ -559,10 +601,14 @@ export class AppComponent {
 
   channelUrl = signal('');
   query = signal('');
-  page = signal<'overview' | 'channels' | 'sync-progress' | 'import'>('overview');
+  page = signal<'overview' | 'channels' | 'suggestions' | 'sync-progress' | 'import'>('overview');
   videos = signal<Video[]>([]);
   playingVideo = signal<Video | null>(null);
   channels = signal<Channel[]>([]);
+  suggestions = signal<Suggestion[]>([]);
+  suggestionQuery = signal('');
+  suggestionsLoading = signal(false);
+  addingSuggestionUrl = signal<string | null>(null);
   syncProgress = signal<ChannelSyncProgress[]>([]);
   failureLogOpen = signal(false);
   failureLog = signal<string[]>([]);
@@ -612,6 +658,13 @@ export class AppComponent {
   });
 
   visibleVideos = computed(() => this.videos().slice(this.virtualStart(), this.virtualStart() + this.pageSize));
+  filteredSuggestions = computed(() => {
+    const query = this.suggestionQuery().trim().toLocaleLowerCase();
+    if (!query) return this.suggestions();
+    return this.suggestions().filter((suggestion) =>
+      `${suggestion.title} ${suggestion.categories.join(' ')}`.toLocaleLowerCase().includes(query),
+    );
+  });
   visibleChannelVideos = computed(() => this.importVideos().slice(this.channelVirtualStart(), this.channelVirtualStart() + this.pageSize));
   channelVirtualBottom = computed(() => Math.max(0, (this.importVideos().length - this.channelVirtualStart() - this.visibleChannelVideos().length) * this.channelRowHeight));
   virtualBottom = computed(() => Math.max(0, (this.videos().length - this.virtualStart() - this.visibleVideos().length) * this.rowHeight));
@@ -636,6 +689,7 @@ export class AppComponent {
       },
       error: () => this.error.set(this.t('Cannot reach the backend at localhost:3000.', 'Kan de backend niet bereiken op localhost:3000.')),
     });
+    this.loadSuggestions();
     // Houdt gedownload/wachtrij/voortgang actueel.
     interval(2000)
       .pipe(
@@ -684,11 +738,12 @@ export class AppComponent {
     }
   }
 
-  openPage(page: 'overview' | 'channels' | 'sync-progress' | 'import') {
+  openPage(page: 'overview' | 'channels' | 'suggestions' | 'sync-progress' | 'import') {
     this.page.set(page);
     this.error.set('');
     if (page === 'overview') this.fetchVideoPage(0, false);
     if (page === 'channels') this.loadChannels();
+    if (page === 'suggestions') { this.loadChannels(); this.loadSuggestions(); }
     if (page === 'sync-progress') this.loadSyncProgress();
   }
 
@@ -734,6 +789,37 @@ export class AppComponent {
     this.http.get<Channel[]>(`${API}/channels`).subscribe({
       next: (channels) => this.channels.set(channels),
       error: () => this.error.set(this.t('Could not load saved channels.', 'Kan de opgeslagen kanalen niet laden.')),
+    });
+  }
+
+  loadSuggestions() {
+    this.suggestionsLoading.set(true);
+    this.http.get<Suggestion[]>(`${API}/suggestions`).subscribe({
+      next: (suggestions) => { this.suggestions.set(suggestions); this.suggestionsLoading.set(false); },
+      error: () => {
+        this.suggestionsLoading.set(false);
+        this.error.set(this.t('Could not load channel suggestions.', 'Kan de kanaalsuggesties niet laden.'));
+      },
+    });
+  }
+
+  isSuggestionAdded(suggestion: Suggestion) {
+    return this.channels().some((channel) => channel.url === suggestion.url);
+  }
+
+  addSuggestedChannel(suggestion: Suggestion) {
+    if (this.isSuggestionAdded(suggestion) || this.addingSuggestionUrl()) return;
+    this.addingSuggestionUrl.set(suggestion.url);
+    this.error.set('');
+    this.http.post<{ channels: Channel[] }>(`${API}/channels`, { url: suggestion.url }).subscribe({
+      next: (result) => {
+        this.channels.set(result.channels);
+        this.addingSuggestionUrl.set(null);
+      },
+      error: (e) => {
+        this.error.set(e.error?.message ?? this.t('Could not add this channel.', 'Dit kanaal toevoegen is mislukt.'));
+        this.addingSuggestionUrl.set(null);
+      },
     });
   }
 

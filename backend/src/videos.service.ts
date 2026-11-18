@@ -21,6 +21,7 @@ const ID_RE = /^[A-Za-z0-9_-]{11}$/;
 // Bestandsnaam: "Titel [videoId].mp4" (zie output-template hieronder)
 const FILE_ID_RE = /\[([A-Za-z0-9_-]{11})\]\.[^.]+$/;
 export interface ChannelBookmark { url: string; title: string; addedAt: string; autoSync: boolean; }
+export interface ChannelSuggestion { title: string; url: string; categories: string[]; }
 
 @Injectable()
 export class VideosService implements OnModuleInit {
@@ -35,6 +36,7 @@ export class VideosService implements OnModuleInit {
   private readonly queuePath = join(this.dataDir, 'sync-queue.json');
   private readonly subtitleQueuePath = join(this.dataDir, 'subtitle-queue.json');
   private readonly failureLogPath = join(this.dataDir, 'sync-failures.log');
+  private readonly suggestionsPath = process.env.SUGGESTIONS_PATH ?? resolve(process.cwd(), '../docs/skills/suggestions.json');
   private configuredDir: string | null = null;
   private readonly defaultDownloadDir = process.env.DOWNLOAD_DIR ? resolve(process.env.DOWNLOAD_DIR) : null;
   private readonly ytdlp = process.env.YTDLP_PATH ?? 'yt-dlp';
@@ -210,6 +212,11 @@ export class VideosService implements OnModuleInit {
       return channels.map((channel) => ({ ...channel, autoSync: channel.autoSync === true }));
     }
     catch { return []; }
+  }
+
+  async getSuggestions(): Promise<ChannelSuggestion[]> {
+    const data = JSON.parse(await readFile(this.suggestionsPath, 'utf8')) as { suggestions: ChannelSuggestion[] };
+    return data.suggestions;
   }
 
   async addChannel(channelUrl: string) {

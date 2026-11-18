@@ -7,6 +7,7 @@ A local video library for importing YouTube channels, syncing selected videos, a
 - `frontend/` — Angular web application
 - `backend/` — NestJS API and download/sync services
 - `docs/features/app-features.md` — product requirements and feature notes
+- `docs/skills/survival-skills.md` and `docs/skills/suggestions.json` — self-reliance skills guide and verified channel suggestions
 - `.claude/agents/collect-metadata.md` — metadata collection agent instructions
 
 ## Prerequisites

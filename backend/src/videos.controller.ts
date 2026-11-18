@@ -34,6 +34,11 @@ export class VideosController {
     return this.videos.getChannels();
   }
 
+  @Get('suggestions')
+  suggestions() {
+    return this.videos.getSuggestions();
+  }
+
   @Get('channels/progress')
   channelProgress() {
     return this.videos.getChannelProgress();
