@@ -13,6 +13,9 @@
 **/videos.json
 **/settings.json
 **/sync-queue.json
+/docker-data/
+/downloads/
+/cookies.txt
 
 # Operating system files
 .DS_Store

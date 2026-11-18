@@ -76,3 +76,32 @@ npm start
 Optional DeepL translation can be configured with `DEEPL_AUTH_KEY` in the backend environment. Do not commit real credentials; `backend/.env.example` contains the variable names only.
 
 Application settings and the video catalog are stored in the user's home directory, separate from this project checkout.
+
+## Run with Docker
+
+Install Docker Desktop, then run these commands from the project folder:
+
+```bash
+docker compose up --build -d
+```
+
+Open [http://localhost:8080](http://localhost:8080). The first build may take a few minutes. To stop the app, run `docker compose down` from the same folder.
+
+Docker stores persistent data in two folders beside `docker-compose.yml`:
+
+- `docker-data/` contains app settings, channel bookmarks, video metadata, queues and logs.
+- `downloads/` contains downloaded videos and subtitles by default. To reuse a video folder from the old setup, set `VIDEO_LIBRARY_DIR` in the root `.env` file to its full host path (for example, `/Users/your-name/Movies/youtube`).
+
+Both folders are excluded from Git. Keep them to preserve the library across updates; back them up to preserve your data. Set `APP_PORT` in a root `.env` file to change the web address port. In the app's storage setting, use `/downloads` or a subfolder of it so the files stay on the host computer; `VIDEO_LIBRARY_DIR` controls which host folder is mounted there.
+
+### YouTube account cookies in Docker
+
+Containers cannot read cookies from a browser installed on the host computer. The Docker setup therefore does not try to read browser cookies. If a download requires your signed-in YouTube session, export cookies in Netscape format to `cookies.txt` in the project folder, then start the app with the additional Compose file:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cookies.yml up --build -d
+```
+
+The cookie file is mounted read-only and ignored by Git. Treat it like a password: do not share it, and remove it when you no longer need it. Without this optional file, public videos can still be scanned and downloaded. In Docker, the browser selector in Settings is not used; the cookie file is the supported way to authenticate.
+
+To rebuild after updating the project, run `docker compose up --build -d` again. The persistent folders remain in place.

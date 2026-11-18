@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 import { mkdirSync } from 'fs';
-import { appendFile, readFile, readdir, rename, writeFile } from 'fs/promises';
+import { access, appendFile, readFile, readdir, rename, writeFile } from 'fs/promises';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 import { createInterface } from 'node:readline';
@@ -25,7 +25,9 @@ export interface ChannelBookmark { url: string; title: string; addedAt: string; 
 @Injectable()
 export class VideosService implements OnModuleInit {
   private static readonly COOKIE_BROWSERS = ['chrome', 'chromium', 'firefox', 'safari', 'edge', 'brave', 'opera', 'vivaldi', 'whale'] as const;
-  private readonly dataDir = join(homedir(), '.youtubedownloader');
+  private readonly dataDir = process.env.APP_DATA_DIR
+    ? resolve(process.env.APP_DATA_DIR)
+    : join(homedir(), '.youtubedownloader');
   private readonly settingsPath = join(this.dataDir, 'settings.json');
   private readonly catalogPath = join(this.dataDir, 'videos.json');
   private readonly channelsPath = join(this.dataDir, 'channels.json');
@@ -33,9 +35,12 @@ export class VideosService implements OnModuleInit {
   private readonly queuePath = join(this.dataDir, 'sync-queue.json');
   private readonly subtitleQueuePath = join(this.dataDir, 'subtitle-queue.json');
   private readonly failureLogPath = join(this.dataDir, 'sync-failures.log');
-  private configuredDir: string | null = process.env.DOWNLOAD_DIR ? resolve(process.env.DOWNLOAD_DIR) : null;
+  private configuredDir: string | null = null;
+  private readonly defaultDownloadDir = process.env.DOWNLOAD_DIR ? resolve(process.env.DOWNLOAD_DIR) : null;
   private readonly ytdlp = process.env.YTDLP_PATH ?? 'yt-dlp';
   private cookiesBrowser: string = process.env.YTDLP_COOKIES_BROWSER ?? 'chrome';
+  private readonly cookiesFile = process.env.YTDLP_COOKIES_FILE;
+  private readonly useBrowserCookies = process.env.YTDLP_USE_BROWSER_COOKIES !== 'false';
   private language: 'en' | 'nl' = 'en';
 
   private queue: string[] = [];
@@ -99,7 +104,17 @@ export class VideosService implements OnModuleInit {
       const saved = JSON.parse(await readFile(this.settingsPath, 'utf8')) as {
         downloadDir?: string; maxParallelDownloads?: number; cookiesBrowser?: string; syncEnabled?: boolean; language?: string;
       };
-      if (!this.configuredDir && saved.downloadDir) this.configuredDir = resolve(saved.downloadDir);
+      if (saved.downloadDir) {
+        this.configuredDir = resolve(saved.downloadDir);
+        if (process.env.APP_DATA_DIR && this.defaultDownloadDir) {
+          try { await access(this.configuredDir); }
+          catch {
+            this.configuredDir = this.defaultDownloadDir;
+            await this.persist(this.settingsPath, this.settingsData(this.configuredDir));
+          }
+        }
+      }
+      else if (!this.configuredDir && this.defaultDownloadDir) this.configuredDir = this.defaultDownloadDir;
       if (Number.isInteger(saved.maxParallelDownloads) && saved.maxParallelDownloads! >= 1) {
         this.maxParallelDownloads = Math.min(saved.maxParallelDownloads!, 8);
       }
@@ -143,6 +158,8 @@ export class VideosService implements OnModuleInit {
   }
 
   private get cookieArgs() {
+    if (this.cookiesFile) return ['--cookies', this.cookiesFile];
+    if (!this.useBrowserCookies) return [];
     return ['--cookies-from-browser', this.cookiesBrowser];
   }
 

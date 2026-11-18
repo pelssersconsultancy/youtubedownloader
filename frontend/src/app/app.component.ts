@@ -22,7 +22,7 @@ interface State {
   failed: string[];
 }
 
-const API = 'http://localhost:3000/api';
+const API = '/api';
 
 @Component({
   selector: 'app-root',

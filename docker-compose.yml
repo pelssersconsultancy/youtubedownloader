@@ -1,0 +1,24 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      HOME: /config
+      APP_DATA_DIR: /config
+      DOWNLOAD_DIR: /downloads
+      YTDLP_USE_BROWSER_COOKIES: "false"
+      YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-}
+      DEEPL_AUTH_KEY: ${DEEPL_AUTH_KEY:-}
+    volumes:
+      - ./docker-data:/config
+      - "${VIDEO_LIBRARY_DIR:-./downloads}:/downloads"
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:80"
