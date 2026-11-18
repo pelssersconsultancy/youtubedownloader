@@ -80,29 +80,28 @@ Application settings and the video catalog are stored in the user's home directo
 
 ## Run with Docker
 
-Install Docker Desktop, then run these commands from the project folder:
+The published image contains the frontend, backend, yt-dlp and FFmpeg in one container. Install Docker Desktop; Node.js, pnpm, Git and a local build are not required. The first release will be published at `ghcr.io/pelssersconsultancy/youtubedownloader` for Intel/AMD and Apple Silicon computers.
+
+For Docker Desktop, pull that image from **Images**, then select **Run**. In Optional settings, map host port `8080` to container port `80`, and map folders on your computer to `/config` and `/downloads`. Then open [http://localhost:8080](http://localhost:8080). Docker Desktop lets you set ports and volumes in the Run dialog. Keep the `/config` folder to preserve settings, channels, metadata and queues. Keep the `/downloads` folder to preserve downloaded videos and subtitles.
+
+If you have the project folder, its Compose file can do the same setup and automatically pull the published image:
 
 ```bash
-docker compose up --build -d
+docker compose up -d
 ```
 
-Open [http://localhost:8080](http://localhost:8080). The first build may take a few minutes. To stop the app, run `docker compose down` from the same folder.
+The default Compose setup keeps app data in `docker-data/` and videos in the `downloads/` folder next to `docker-compose.yml`. Set `VIDEO_LIBRARY_DIR` in `.env` to use another full host path (for example, `/Users/your-name/Movies/youtube`). Set `APP_PORT` to change the local web address port. To stop the app without deleting its data, run `docker compose down`.
 
-Docker stores persistent data in two folders beside `docker-compose.yml`:
-
-- `docker-data/` contains app settings, channel bookmarks, video metadata, queues and logs.
-- `downloads/` contains downloaded videos and subtitles by default. To reuse a video folder from the old setup, set `VIDEO_LIBRARY_DIR` in the root `.env` file to its full host path (for example, `/Users/your-name/Movies/youtube`).
-
-Both folders are excluded from Git. Keep them to preserve the library across updates; back them up to preserve your data. Set `APP_PORT` in a root `.env` file to change the web address port. In the app's storage setting, use `/downloads` or a subfolder of it so the files stay on the host computer; `VIDEO_LIBRARY_DIR` controls which host folder is mounted there.
+Every push to `main` or `master` publishes a new `latest` image; version tags such as `v1.0.0` publish versioned images too. Once the package has been published for the first time, set its visibility to **Public** in GitHub Packages so users can download it without signing in.
 
 ### YouTube account cookies in Docker
 
 Containers cannot read cookies from a browser installed on the host computer. The Docker setup therefore does not try to read browser cookies. If a download requires your signed-in YouTube session, export cookies in Netscape format to `cookies.txt` in the project folder, then start the app with the additional Compose file:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.cookies.yml up --build -d
+docker compose -f docker-compose.yml -f docker-compose.cookies.yml up -d
 ```
 
 The cookie file is mounted read-only and ignored by Git. Treat it like a password: do not share it, and remove it when you no longer need it. Without this optional file, public videos can still be scanned and downloaded. In Docker, the browser selector in Settings is not used; the cookie file is the supported way to authenticate.
 
-To rebuild after updating the project, run `docker compose up --build -d` again. The persistent folders remain in place.
+After a new image is published, Compose pulls it when you run `docker compose up -d` again. The persistent volume and video folder remain in place.

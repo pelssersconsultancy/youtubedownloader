@@ -1,5 +1,5 @@
 services:
-  backend:
+  app:
     environment:
       YTDLP_COOKIES_FILE: /cookies/youtube.txt
       YTDLP_USE_BROWSER_COOKIES: "false"

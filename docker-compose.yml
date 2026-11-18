@@ -1,8 +1,7 @@
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+  app:
+    image: ghcr.io/pelssersconsultancy/youtubedownloader:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     environment:
       HOME: /config
@@ -14,12 +13,5 @@ services:
     volumes:
       - ./docker-data:/config
       - "${VIDEO_LIBRARY_DIR:-./downloads}:/downloads"
-
-  frontend:
-    build:
-      context: ./frontend
-    restart: unless-stopped
-    depends_on:
-      - backend
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:80"
