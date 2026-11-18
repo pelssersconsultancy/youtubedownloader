@@ -51,6 +51,9 @@ export class VideosService implements OnModuleInit {
   private subtitleQueue: string[] = [];
   private active = new Map<string, { progress: number }>();
   private activeSubtitleDownloads = new Set<string>();
+  private subtitleRateLimitAttempts = new Map<string, number>();
+  private subtitleNextRunAt = 0;
+  private subtitlePumpTimer: ReturnType<typeof setTimeout> | null = null;
   private downloadProcesses = new Map<string, ChildProcess>();
   private maxParallelDownloads = 1;
   private syncEnabled = true;
@@ -678,7 +681,7 @@ export class VideosService implements OnModuleInit {
   }
 
   private async ensureDownloadedSubtitles(id: string) {
-    if (this.subtitleAttempts.has(id)) return;
+    if (this.subtitleAttempts.has(id) || (this.subtitleQueue.includes(id) && Date.now() < this.subtitleNextRunAt)) return;
     let task = this.subtitleDownloads.get(id);
     if (!task) {
       let resolve!: () => void;
@@ -702,28 +705,76 @@ export class VideosService implements OnModuleInit {
 
   private pumpSubtitleQueue() {
     if (!this.configuredDir || this.activeSubtitleDownloads.size) return;
+    const waitMs = this.subtitleNextRunAt - Date.now();
+    if (waitMs > 0) {
+      this.scheduleSubtitlePump(waitMs);
+      return;
+    }
     const id = this.subtitleQueue.find((queuedId) => !this.activeSubtitleDownloads.has(queuedId));
     if (!id) return;
     this.activeSubtitleDownloads.add(id);
-    void this.downloadSubtitles(id).catch((error) => {
-      console.error(`Ondertitelproces mislukt voor ${id}: ${String(error)}`);
-    }).finally(() => {
+    void this.downloadSubtitles(id).then(async (result) => {
+      this.activeSubtitleDownloads.delete(id);
+      if (result.rateLimited) {
+        const attempts = (this.subtitleRateLimitAttempts.get(id) ?? 0) + 1;
+        this.subtitleRateLimitAttempts.set(id, attempts);
+        const delayMs = Math.min(30 * 60_000, 60_000 * 2 ** Math.min(attempts - 1, 5));
+        this.subtitleNextRunAt = Date.now() + delayMs;
+        console.warn(`Ondertitels ophalen voor ${id} is door YouTube beperkt (HTTP 429); opnieuw proberen over ${Math.ceil(delayMs / 60_000)} min.`);
+        this.subtitleDownloads.get(id)?.resolve();
+        this.subtitleDownloads.delete(id);
+        await this.saveSubtitleQueue().catch((error) => console.error(`Ondertitelwachtrij opslaan mislukt: ${String(error)}`));
+        this.scheduleSubtitlePump(delayMs);
+        return;
+      }
+      this.subtitleQueue = this.subtitleQueue.filter((queuedId) => queuedId !== id);
+      this.subtitleAttempts.add(id);
+      this.subtitleRateLimitAttempts.delete(id);
+      if (!result.success && result.error) console.error(`Ondertitels ophalen mislukt voor ${id}: ${result.error}`);
+      this.subtitleDownloads.get(id)?.resolve();
+      this.subtitleDownloads.delete(id);
+      this.subtitleNextRunAt = Date.now() + 2_000;
+      await this.saveSubtitleQueue().catch((error) => console.error(`Ondertitelwachtrij opslaan mislukt: ${String(error)}`));
+      this.scheduleSubtitlePump(2_000);
+    }).catch(async (error) => {
       this.activeSubtitleDownloads.delete(id);
       this.subtitleQueue = this.subtitleQueue.filter((queuedId) => queuedId !== id);
       this.subtitleAttempts.add(id);
       this.subtitleDownloads.get(id)?.resolve();
       this.subtitleDownloads.delete(id);
-      void this.saveSubtitleQueue().catch((error) => console.error(`Ondertitelwachtrij opslaan mislukt: ${String(error)}`));
-      this.pumpSubtitleQueue();
+      console.error(`Ondertitelproces mislukt voor ${id}: ${String(error)}`);
+      await this.saveSubtitleQueue().catch((saveError) => console.error(`Ondertitelwachtrij opslaan mislukt: ${String(saveError)}`));
+      this.scheduleSubtitlePump(2_000);
     });
   }
 
+  private scheduleSubtitlePump(delayMs: number) {
+    if (this.subtitlePumpTimer) clearTimeout(this.subtitlePumpTimer);
+    this.subtitlePumpTimer = setTimeout(() => {
+      this.subtitlePumpTimer = null;
+      this.pumpSubtitleQueue();
+    }, delayMs);
+    this.subtitlePumpTimer.unref?.();
+  }
+
   private downloadSubtitles(id: string) {
-    return new Promise<void>((done) => {
+    return new Promise<{ success: boolean; rateLimited: boolean; error?: string }>((done) => {
       let stderr = '';
+      let settled = false;
+      const finish = (success: boolean, error = '') => {
+        if (settled) return;
+        settled = true;
+        done({ success, rateLimited: /HTTP Error 429|Too Many Requests/i.test(error), error: error || undefined });
+      };
       const child = spawn(this.ytdlp, [
         '--no-playlist',
         '--skip-download',
+        '--sleep-subtitles',
+        '5',
+        '--retries',
+        '3',
+        '--retry-sleep',
+        'http:exp=5:60',
         '--write-subs',
         '--write-auto-subs',
         '--sub-langs',
@@ -739,12 +790,10 @@ export class VideosService implements OnModuleInit {
       ]);
       child.stderr.on('data', (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-8000); });
       child.on('error', (error) => {
-        console.error(`Ondertitels ophalen mislukt voor ${id}: ${error.message}`);
-        done();
+        finish(false, error.message);
       });
       child.on('close', (code) => {
-        if (code !== 0 && stderr) console.error(`Ondertitels ophalen mislukt voor ${id}: ${stderr}`);
-        done();
+        finish(code === 0, code === 0 ? '' : stderr || `yt-dlp sloot af met code ${code}`);
       });
     });
   }
