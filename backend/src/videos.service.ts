@@ -47,6 +47,7 @@ export class VideosService implements OnModuleInit {
   private queueWrite = Promise.resolve();
   private failureLogWrite = Promise.resolve();
   private channelScans = new Map<string, Promise<VideoInfo[]>>();
+  private subtitleDownloads = new Map<string, Promise<void>>();
   private channelVideoCache = new Map<string, VideoInfo[]>();
 
   constructor() {
@@ -624,6 +625,69 @@ export class VideosService implements OnModuleInit {
     return join(this.downloadDir, filename);
   }
 
+  private findSubtitleFile(files: string[], id: string, language: 'en' | 'nl') {
+    const pattern = new RegExp(`\\[${id}\\]\\.${language}(?:[-_][a-z0-9]+)*\\.vtt$`, 'i');
+    const candidates = files.filter((file) => pattern.test(file));
+    return candidates.find((file) => file.toLocaleLowerCase().endsWith(`.${language}.vtt`))
+      ?? candidates.sort()[0];
+  }
+
+  private async ensureDownloadedSubtitles(id: string) {
+    const pending = this.subtitleDownloads.get(id);
+    if (pending) return pending;
+
+    const download = new Promise<void>((done) => {
+      let stderr = '';
+      const child = spawn(this.ytdlp, [
+        '--no-playlist',
+        '--skip-download',
+        '--write-subs',
+        '--write-auto-subs',
+        '--sub-langs',
+        'en.*,nl.*',
+        '--sub-format',
+        'vtt/best',
+        '--convert-subs',
+        'vtt',
+        ...this.cookieArgs,
+        '-o',
+        join(this.downloadDir, '%(title)s [%(id)s].%(ext)s'),
+        `https://www.youtube.com/watch?v=${id}`,
+      ]);
+      child.stderr.on('data', (chunk) => {
+        stderr = `${stderr}${String(chunk)}`.slice(-8000);
+      });
+      child.on('error', (error) => {
+        console.error(`Ondertitels ophalen mislukt voor ${id}: ${error.message}`);
+        done();
+      });
+      child.on('close', (code) => {
+        if (code !== 0 && stderr) console.error(`Ondertitels ophalen mislukt voor ${id}: ${stderr}`);
+        done();
+      });
+    });
+
+    this.subtitleDownloads.set(id, download);
+    try { await download; }
+    finally { this.subtitleDownloads.delete(id); }
+  }
+
+  async getDownloadedSubtitlePath(id: string, language: string) {
+    if (!ID_RE.test(id)) throw new BadRequestException('Ongeldig video-id');
+    if (language !== 'en' && language !== 'nl') throw new BadRequestException('Ongeldige ondertitelingstaal');
+    await this.getDownloadedVideoPath(id);
+
+    let files = await readdir(this.downloadDir);
+    let filename = this.findSubtitleFile(files, id, language);
+    if (!filename) {
+      await this.ensureDownloadedSubtitles(id);
+      files = await readdir(this.downloadDir);
+      filename = this.findSubtitleFile(files, id, language);
+    }
+    if (!filename) throw new NotFoundException(`Geen ${language === 'nl' ? 'Nederlandse' : 'Engelse'} ondertiteling beschikbaar`);
+    return join(this.downloadDir, filename);
+  }
+
   async getState() {
     let catalog: Record<string, VideoInfo> = {};
     try { catalog = JSON.parse(await readFile(this.catalogPath, 'utf8')) as Record<string, VideoInfo>; }
@@ -697,6 +761,14 @@ export class VideosService implements OnModuleInit {
       const p = spawn(this.ytdlp, [
         '--no-playlist',
         '--newline',
+        '--write-subs',
+        '--write-auto-subs',
+        '--sub-langs',
+        'en.*,nl.*',
+        '--sub-format',
+        'vtt/best',
+        '--convert-subs',
+        'vtt',
         '-f',
         'bv*[height<=1080]+ba/b[height<=1080]',
         '--merge-output-format',

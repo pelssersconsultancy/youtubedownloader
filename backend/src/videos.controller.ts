@@ -88,6 +88,12 @@ export class VideosController {
     return response.sendFile(path);
   }
 
+  @Get('videos/:id/subtitles/:language')
+  async subtitle(@Param('id') id: string, @Param('language') language: string, @Res() response: Response) {
+    const path = await this.videos.getDownloadedSubtitlePath(id, language);
+    return response.type('text/vtt').sendFile(path);
+  }
+
   /** Lijst van alle video's van een kanaal (of afspeellijst). */
   @Get('channel')
   channel(@Query('url') url: string) {

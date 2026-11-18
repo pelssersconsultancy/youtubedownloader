@@ -1,6 +1,6 @@
 # YouTube Downloader
 
-A local video library for importing YouTube channels, syncing selected videos, and searching downloaded videos by metadata and keywords.
+A local video library for importing YouTube channels, syncing selected videos, and searching downloaded videos by metadata and keywords. Available English and Dutch subtitles are downloaded with each video and selected automatically to match the app language.
 
 ## Project layout
 

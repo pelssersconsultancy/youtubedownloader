@@ -32,6 +32,7 @@ This file is the durable product requirements list for the downloader frontend a
 - Present overview videos as video cards rather than the channel-import selection list; omit download checkboxes and download status there.
 - Make overview video cards show a pointer cursor and a slightly darker background on hover.
 - Open a player for a downloaded local video when its overview card is clicked.
+- Download available English and Dutch manual or auto-generated subtitles alongside videos; serve them as WebVTT tracks and automatically show the track matching the persisted app language. Fetch missing subtitle sidecars on first playback for videos already downloaded.
 
 ## Channel bookmarks and synchronization
 

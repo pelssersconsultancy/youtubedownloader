@@ -217,7 +217,13 @@ const API = 'http://localhost:3000/api';
               <div class="player-heading"><h2>{{ playingVideo()!.title }}</h2>
               <button type="button" class="close-player" [attr.aria-label]="t('Close video player', 'Videospeler sluiten')" (click)="closePlayer()">×</button>
               </div>
-              <video [src]="videoStreamUrl()" [poster]="playingVideo()!.thumbnail" controls autoplay playsinline></video>
+              <video #player [src]="videoStreamUrl()" [poster]="playingVideo()!.thumbnail" controls autoplay playsinline crossorigin="anonymous"
+                     (loadedmetadata)="applySubtitleLanguage(player)">
+                <track kind="subtitles" [src]="subtitleUrl('en')" srclang="en" label="English" [default]="language() === 'en'"
+                       (load)="applySubtitleLanguage(player)" />
+                <track kind="subtitles" [src]="subtitleUrl('nl')" srclang="nl" label="Nederlands" [default]="language() === 'nl'"
+                       (load)="applySubtitleLanguage(player)" />
+              </video>
             </section>
           </div>
         }
@@ -587,6 +593,10 @@ export class AppComponent {
     const video = this.playingVideo();
     return video ? `${API}/videos/${video.id}/play` : '';
   });
+  subtitleUrl(language: 'en' | 'nl') {
+    const video = this.playingVideo();
+    return video ? `${API}/videos/${video.id}/subtitles/${language}` : '';
+  }
   selected = signal<ReadonlySet<string>>(new Set());
   state = signal<State>({ dir: '', downloaded: [], queued: [], current: null, syncEnabled: true, failed: [] });
   settingsOpen = signal(false);
@@ -817,6 +827,17 @@ export class AppComponent {
 
   closePlayer() {
     this.playingVideo.set(null);
+  }
+
+  applySubtitleLanguage(video: HTMLVideoElement) {
+    const preferredLanguage = this.language();
+    let selected = false;
+    for (const track of Array.from(video.textTracks)) {
+      const matches = track.language.toLocaleLowerCase() === preferredLanguage
+        || track.language.toLocaleLowerCase().startsWith(`${preferredLanguage}-`);
+      track.mode = matches && !selected ? 'showing' : 'disabled';
+      if (matches) selected = true;
+    }
   }
 
   loadChannel(url: string) {
