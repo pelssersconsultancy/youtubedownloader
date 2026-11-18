@@ -1,720 +1,846 @@
 {
   "source": "survival-skills.md",
   "lastVerified": "2026-11-18",
-  "suggestions": [
-    {
-      "title": "Off Grid with Doug & Stacy",
-      "url": "https://www.youtube.com/@OFFGRIDwithDOUGSTACY",
-      "categories": [
-        "Preserving food without refrigeration (canning, drying, fermenting, salting, root cellars)",
-        "Cooking without electricity (fire, Dutch oven, rocket stove, solar oven)",
-        "Water purification and collection (filters, boiling, rain barrels, wells)",
-        "Broad self-sufficiency channels"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Homesteading Family",
-      "url": "https://www.youtube.com/@HomesteadingFamily",
-      "categories": [
-        "Preserving food without refrigeration (canning, drying, fermenting, salting, root cellars)",
-        "Emergency supplies and long-term storage (rice, beans, grains, salt, water)",
-        "Keeping small livestock (chickens, rabbits, goats, bees)",
-        "Butchering and meat processing",
-        "Broad self-sufficiency channels"
-      ],
-      "verified": true
-    },
-    {
-      "title": "RoseRed Homestead",
-      "url": "https://www.youtube.com/@RoseRedHomestead",
-      "categories": [
-        "Preserving food without refrigeration (canning, drying, fermenting, salting, root cellars)",
-        "Emergency supplies and long-term storage (rice, beans, grains, salt, water)",
-        "Broad self-sufficiency channels"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Deep South Homestead",
-      "url": "https://www.youtube.com/@DeepSouthHomestead",
-      "categories": [
-        "Preserving food without refrigeration (canning, drying, fermenting, salting, root cellars)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Becky's Homestead",
-      "url": "https://www.youtube.com/@BeckysHomestead",
-      "categories": [
-        "Preserving food without refrigeration (canning, drying, fermenting, salting, root cellars)",
-        "Keeping small livestock (chickens, rabbits, goats, bees)",
-        "Broad self-sufficiency channels"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Townsends",
-      "url": "https://www.youtube.com/@townsends",
-      "categories": [
-        "Preserving food without refrigeration (canning, drying, fermenting, salting, root cellars)",
-        "Cooking without electricity (fire, Dutch oven, rocket stove, solar oven)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Canadian Prepper",
-      "url": "https://www.youtube.com/@CanadianPrepper",
-      "categories": [
-        "Emergency supplies and long-term storage (rice, beans, grains, salt, water)",
-        "Water purification and collection (filters, boiling, rain barrels, wells)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Kent Rollins",
-      "url": "https://www.youtube.com/@CowboyKentRollins",
-      "categories": [
-        "Cooking without electricity (fire, Dutch oven, rocket stove, solar oven)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "The Bread Code",
-      "url": "https://www.youtube.com/@the_bread_code",
-      "categories": [
-        "Bread baking and sourdough"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Bake with Jack",
-      "url": "https://www.youtube.com/@Bakewithjack",
-      "categories": [
-        "Bread baking and sourdough"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Charles Dowding",
-      "url": "https://www.youtube.com/@CharlesDowding1nodig",
-      "categories": [
-        "Gardening (no-dig, fertilizing, composting, seasons)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Huw Richards",
-      "url": "https://www.youtube.com/@HuwRichards",
-      "categories": [
-        "Gardening (no-dig, fertilizing, composting, seasons)",
-        "Saving and storing seeds"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Self Sufficient Me",
-      "url": "https://www.youtube.com/@Selfsufficientme",
-      "categories": [
-        "Gardening (no-dig, fertilizing, composting, seasons)",
-        "Saving and storing seeds"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Epic Gardening",
-      "url": "https://www.youtube.com/@epicgardening",
-      "categories": [
-        "Gardening (no-dig, fertilizing, composting, seasons)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Justin Rhodes",
-      "url": "https://www.youtube.com/@theJustinRhodesShow",
-      "categories": [
-        "Keeping small livestock (chickens, rabbits, goats, bees)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Gold Shaw Farm",
-      "url": "https://www.youtube.com/@GoldShawFarm",
-      "categories": [
-        "Keeping small livestock (chickens, rabbits, goats, bees)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Green Deane (Eat the Weeds)",
-      "url": "https://www.youtube.com/@EatTheWeeds",
-      "categories": [
-        "Foraging (edible wild plants, mushrooms)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Black Forager",
-      "url": "https://www.youtube.com/@BlackForager",
-      "categories": [
-        "Foraging (edible wild plants, mushrooms)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Adam Haritan (Learn Your Land)",
-      "url": "https://www.youtube.com/@LearnYourLand",
-      "categories": [
-        "Foraging (edible wild plants, mushrooms)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "MeatEater",
-      "url": "https://www.youtube.com/@MeatEaterTV",
-      "categories": [
-        "Hunting, fishing, trapping"
-      ],
-      "verified": true
-    },
-    {
-      "title": "The Bearded Butchers",
-      "url": "https://www.youtube.com/@TheBeardedButchers",
-      "categories": [
-        "Butchering and meat processing"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Engineer775",
-      "url": "https://www.youtube.com/@engineer775",
-      "categories": [
-        "Water purification and collection (filters, boiling, rain barrels, wells)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Wild Wonderful Off-Grid",
-      "url": "https://www.youtube.com/@WildWonderfulOffGrid",
-      "categories": [
-        "Water purification and collection (filters, boiling, rain barrels, wells)",
-        "Solar power and batteries (12V systems)",
-        "Natural building (earth, timber, off-grid cabins)",
-        "Sanitation and hygiene (outdoor toilets, waste, soap making)",
-        "Broad self-sufficiency channels"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Will Prowse",
-      "url": "https://www.youtube.com/@WillProwse",
-      "categories": [
-        "Solar power and batteries (12V systems)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Off Grid Garage",
-      "url": "https://www.youtube.com/@OffGridGarageAustralia",
-      "categories": [
-        "Solar power and batteries (12V systems)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Kris Harbour",
-      "url": "https://www.youtube.com/@KrisHarbour",
-      "categories": [
-        "Natural building (earth, timber, off-grid cabins)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Wranglerstar",
-      "url": "https://www.youtube.com/@wranglerstar",
-      "categories": [
-        "Natural building (earth, timber, off-grid cabins)",
-        "Insulation and heating (wood stoves, building science)",
-        "Axes, saws, and firewood (splitting, stacking, drying)",
-        "Joinery and carpentry (homebuilding)",
-        "Broad self-sufficiency channels"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Primitive Technology",
-      "url": "https://www.youtube.com/@primitivetechnology9550",
-      "categories": [
-        "Natural building (earth, timber, off-grid cabins)",
-        "Fire starting (matches, ferro rods, bow drills, wet weather)",
-        "Natural crafts (basket weaving, pottery, rope)",
-        "Broad self-sufficiency channels"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Matt Risinger",
-      "url": "https://www.youtube.com/@buildshow",
-      "categories": [
-        "Insulation and heating (wood stoves, building science)",
-        "Joinery and carpentry (homebuilding)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Joe Robinet",
-      "url": "https://www.youtube.com/@therealjoerobinet",
-      "categories": [
-        "Wilderness shelter (tarps, shelters, camping skills)",
-        "Fire starting (matches, ferro rods, bow drills, wet weather)",
-        "Knots and rope making"
-      ],
-      "verified": true
-    },
-    {
-      "title": "TA Outdoors",
-      "url": "https://www.youtube.com/@TAOutdoors",
-      "categories": [
-        "Wilderness shelter (tarps, shelters, camping skills)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Far North Bushcraft and Survival",
-      "url": "https://www.youtube.com/@Far-North-Bushcraft-Survival",
-      "categories": [
-        "Wilderness shelter (tarps, shelters, camping skills)",
-        "Fire starting (matches, ferro rods, bow drills, wet weather)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Paul Kirtley",
-      "url": "https://www.youtube.com/@PaulKirtley",
-      "categories": [
-        "Wilderness shelter (tarps, shelters, camping skills)",
-        "Map and compass navigation"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Royalty Soaps",
-      "url": "https://www.youtube.com/@RoyaltySoaps",
-      "categories": [
-        "Sanitation and hygiene (outdoor toilets, waste, soap making)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Coalcracker Bushcraft",
-      "url": "https://www.youtube.com/@coalcracker",
-      "categories": [
-        "Fire starting (matches, ferro rods, bow drills, wet weather)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Survival Lilly",
-      "url": "https://www.youtube.com/@SurvivalLilly",
-      "categories": [
-        "Fire starting (matches, ferro rods, bow drills, wet weather)",
-        "Knots and rope making",
-        "Natural crafts (basket weaving, pottery, rope)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Animated Knots by Grog",
-      "url": "https://www.youtube.com/@AnimatedKnotsbyGrog",
-      "categories": [
-        "Knots and rope making"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Iz Turley",
-      "url": "https://www.youtube.com/@turleycustoms",
-      "categories": [
-        "Axes, saws, and firewood (splitting, stacking, drying)",
-        "Choosing and sharpening knives"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Cedric & Ada",
-      "url": "https://www.youtube.com/@CedricAda",
-      "categories": [
-        "Choosing and sharpening knives"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Outdoors55",
-      "url": "https://www.youtube.com/@Outdoors55",
-      "categories": [
-        "Choosing and sharpening knives"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Paul Sellers",
-      "url": "https://www.youtube.com/@Paul.Sellers",
-      "categories": [
-        "Hand-tool woodworking"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Rex Krueger",
-      "url": "https://www.youtube.com/@RexKrueger",
-      "categories": [
-        "Hand-tool woodworking"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Wood by Wright",
-      "url": "https://www.youtube.com/@WoodByWrightHowTo",
-      "categories": [
-        "Hand-tool woodworking"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Stavros Gakos",
-      "url": "https://www.youtube.com/@StavrosGakos",
-      "categories": [
-        "Hand-tool woodworking"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Steve Ramsey (Woodworking for Mere Mortals)",
-      "url": "https://www.youtube.com/@SteveRamsey",
-      "categories": [
-        "Machine woodworking (furniture, sheds)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Matthias Wandel",
-      "url": "https://www.youtube.com/@matthiaswandel",
-      "categories": [
-        "Machine woodworking (furniture, sheds)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Fine Woodworking",
-      "url": "https://www.youtube.com/@FineWoodworking",
-      "categories": [
-        "Machine woodworking (furniture, sheds)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Stumpy Nubs",
-      "url": "https://www.youtube.com/@StumpyNubs",
-      "categories": [
-        "Machine woodworking (furniture, sheds)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Jay Bates",
-      "url": "https://www.youtube.com/@JayBates",
-      "categories": [
-        "Machine woodworking (furniture, sheds)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Black Bear Forge",
-      "url": "https://www.youtube.com/@BlackBearForge",
-      "categories": [
-        "Blacksmithing"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Torbjörn Åhman",
-      "url": "https://www.youtube.com/@torbjornahman",
-      "categories": [
-        "Blacksmithing"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Alec Steele",
-      "url": "https://www.youtube.com/@AlecSteele",
-      "categories": [
-        "Blacksmithing"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Weld.com",
-      "url": "https://www.youtube.com/@Welddotcom",
-      "categories": [
-        "Welding"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Welding Tips and Tricks (Jody Collier)",
-      "url": "https://www.youtube.com/@weldingtipsandtricks",
-      "categories": [
-        "Welding"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Kevin Caron",
-      "url": "https://www.youtube.com/@KevincaronSculpture",
-      "categories": [
-        "Welding"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Blondihacks",
-      "url": "https://www.youtube.com/@Blondihacks",
-      "categories": [
-        "Metal turning and milling (machine shop)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "mrpete222 (tubalcain)",
-      "url": "https://www.youtube.com/@mrpete222",
-      "categories": [
-        "Metal turning and milling (machine shop)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "This Old Tony",
-      "url": "https://www.youtube.com/@ThisOldTony",
-      "categories": [
-        "Metal turning and milling (machine shop)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Jimmy DiResta",
-      "url": "https://www.youtube.com/@jimmydiresta",
-      "categories": [
-        "Making tools from scrap (general fabrication)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Jeremy Schmidt",
-      "url": "https://www.youtube.com/@Jer_Schmidt",
-      "categories": [
-        "Making tools from scrap (general fabrication)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Laura Kampf",
-      "url": "https://www.youtube.com/@laurakampf",
-      "categories": [
-        "Making tools from scrap (general fabrication)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Anita by Design",
-      "url": "https://www.youtube.com/@AnitabyDesign",
-      "categories": [
-        "Sewing (machine and hand sewing)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Sewing Therapy",
-      "url": "https://www.youtube.com/@SewingTherapy",
-      "categories": [
-        "Sewing (machine and hand sewing)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Sew Sew Live",
-      "url": "https://www.youtube.com/@SewSewLive",
-      "categories": [
-        "Sewing (machine and hand sewing)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "VeryPink Knits",
-      "url": "https://www.youtube.com/@verypinkknits",
-      "categories": [
-        "Knitting and crochet"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Studio Knit",
-      "url": "https://www.youtube.com/@studioknit",
-      "categories": [
-        "Knitting and crochet"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Sheep & Stitch",
-      "url": "https://www.youtube.com/@sheepandstitch",
-      "categories": [
-        "Knitting and crochet"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Happy Berry Knitting",
-      "url": "https://www.youtube.com/@HappyBerryKnitting",
-      "categories": [
-        "Knitting and crochet"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Knitty Natty",
-      "url": "https://www.youtube.com/@KnittyNatty",
-      "categories": [
-        "Knitting and crochet"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Patty Lyons",
-      "url": "https://www.youtube.com/@PattyLyonsKnitting",
-      "categories": [
-        "Knitting and crochet"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Corter Leather",
-      "url": "https://www.youtube.com/@Corter",
-      "categories": [
-        "Leatherworking (shoes, belts, bags)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Dr. Bones and Nurse Amy",
-      "url": "https://www.youtube.com/@DrBonesNurseAmy",
-      "categories": [
-        "First aid and emergency medicine"
-      ],
-      "verified": true
-    },
-    {
-      "title": "The Red Cross",
-      "url": "https://www.youtube.com/@RodeKruis",
-      "categories": [
-        "First aid and emergency medicine"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Herbs with Rosalee",
-      "url": "https://www.youtube.com/@HerbsWithRosalee",
-      "categories": [
-        "Herbal medicine"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Park Tool",
-      "url": "https://www.youtube.com/@parktool",
-      "categories": [
-        "Bicycle maintenance"
-      ],
-      "verified": true
-    },
-    {
-      "title": "GCN",
-      "url": "https://www.youtube.com/@gcn",
-      "categories": [
-        "Bicycle maintenance"
-      ],
-      "verified": true
-    },
-    {
-      "title": "ChrisFix",
-      "url": "https://www.youtube.com/@chrisfix",
-      "categories": [
-        "Engines and vehicles"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Engineering Explained",
-      "url": "https://www.youtube.com/@EngineeringExplained",
-      "categories": [
-        "Engines and vehicles"
-      ],
-      "verified": true
-    },
-    {
-      "title": "EEVblog",
-      "url": "https://www.youtube.com/@EEVblog",
-      "categories": [
-        "Electronics and basic electrical work"
-      ],
-      "verified": true
-    },
-    {
-      "title": "GreatScott!",
-      "url": "https://www.youtube.com/@greatscottlab",
-      "categories": [
-        "Electronics and basic electrical work"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Electrician U",
-      "url": "https://www.youtube.com/@electricianu",
-      "categories": [
-        "Electronics and basic electrical work"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Roger Wakefield",
-      "url": "https://www.youtube.com/@RogerWakefield",
-      "categories": [
-        "Plumbing"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Home Repair Tutor",
-      "url": "https://www.youtube.com/@HomeRepairTutor",
-      "categories": [
-        "Plumbing"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Ham Radio Crash Course",
-      "url": "https://www.youtube.com/@HamRadioCrashCourse",
-      "categories": [
-        "Emergency communications (walkie-talkies, amateur radio)"
-      ],
-      "verified": true
-    },
-    {
-      "title": "Ham Radio 2.0",
-      "url": "https://www.youtube.com/@HamRadio2",
-      "categories": [
-        "Emergency communications (walkie-talkies, amateur radio)"
-      ],
-      "verified": true
+  "sections": [
+    {
+      "title": "Food",
+      "subsections": [
+        {
+          "title": "Preserving food without refrigeration (canning, drying, fermenting, salting, root cellars)",
+          "channels": [
+            {
+              "title": "Off Grid with Doug & Stacy",
+              "url": "https://www.youtube.com/@OFFGRIDwithDOUGSTACY",
+              "verified": true
+            },
+            {
+              "title": "Homesteading Family",
+              "url": "https://www.youtube.com/@HomesteadingFamily",
+              "verified": true
+            },
+            {
+              "title": "RoseRed Homestead",
+              "url": "https://www.youtube.com/@RoseRedHomestead",
+              "verified": true
+            },
+            {
+              "title": "Deep South Homestead",
+              "url": "https://www.youtube.com/@DeepSouthHomestead",
+              "verified": true
+            },
+            {
+              "title": "Becky's Homestead",
+              "url": "https://www.youtube.com/@BeckysHomestead",
+              "verified": true
+            },
+            {
+              "title": "Townsends",
+              "url": "https://www.youtube.com/@townsends",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Emergency supplies and long-term storage (rice, beans, grains, salt, water)",
+          "channels": [
+            {
+              "title": "Canadian Prepper",
+              "url": "https://www.youtube.com/@CanadianPrepper",
+              "verified": true
+            },
+            {
+              "title": "Homesteading Family",
+              "url": "https://www.youtube.com/@HomesteadingFamily",
+              "verified": true
+            },
+            {
+              "title": "RoseRed Homestead",
+              "url": "https://www.youtube.com/@RoseRedHomestead",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Cooking without electricity (fire, Dutch oven, rocket stove, solar oven)",
+          "channels": [
+            {
+              "title": "Townsends",
+              "url": "https://www.youtube.com/@townsends",
+              "verified": true
+            },
+            {
+              "title": "Kent Rollins",
+              "url": "https://www.youtube.com/@CowboyKentRollins",
+              "verified": true
+            },
+            {
+              "title": "Off Grid with Doug & Stacy",
+              "url": "https://www.youtube.com/@OFFGRIDwithDOUGSTACY",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Bread baking and sourdough",
+          "channels": [
+            {
+              "title": "The Bread Code",
+              "url": "https://www.youtube.com/@the_bread_code",
+              "verified": true
+            },
+            {
+              "title": "Bake with Jack",
+              "url": "https://www.youtube.com/@Bakewithjack",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Gardening (no-dig, fertilizing, composting, seasons)",
+          "channels": [
+            {
+              "title": "Charles Dowding",
+              "url": "https://www.youtube.com/@CharlesDowding1nodig",
+              "verified": true
+            },
+            {
+              "title": "Huw Richards",
+              "url": "https://www.youtube.com/@HuwRichards",
+              "verified": true
+            },
+            {
+              "title": "Self Sufficient Me",
+              "url": "https://www.youtube.com/@Selfsufficientme",
+              "verified": true
+            },
+            {
+              "title": "Epic Gardening",
+              "url": "https://www.youtube.com/@epicgardening",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Saving and storing seeds",
+          "channels": [
+            {
+              "title": "Huw Richards",
+              "url": "https://www.youtube.com/@HuwRichards",
+              "verified": true
+            },
+            {
+              "title": "Self Sufficient Me",
+              "url": "https://www.youtube.com/@Selfsufficientme",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Keeping small livestock (chickens, rabbits, goats, bees)",
+          "channels": [
+            {
+              "title": "Homesteading Family",
+              "url": "https://www.youtube.com/@HomesteadingFamily",
+              "verified": true
+            },
+            {
+              "title": "Becky's Homestead",
+              "url": "https://www.youtube.com/@BeckysHomestead",
+              "verified": true
+            },
+            {
+              "title": "Justin Rhodes",
+              "url": "https://www.youtube.com/@theJustinRhodesShow",
+              "verified": true
+            },
+            {
+              "title": "Gold Shaw Farm",
+              "url": "https://www.youtube.com/@GoldShawFarm",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Foraging (edible wild plants, mushrooms)",
+          "channels": [
+            {
+              "title": "Green Deane (Eat the Weeds)",
+              "url": "https://www.youtube.com/@EatTheWeeds",
+              "verified": true
+            },
+            {
+              "title": "Black Forager",
+              "url": "https://www.youtube.com/@BlackForager",
+              "verified": true
+            },
+            {
+              "title": "Adam Haritan (Learn Your Land)",
+              "url": "https://www.youtube.com/@LearnYourLand",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Hunting, fishing, trapping",
+          "channels": [
+            {
+              "title": "MeatEater",
+              "url": "https://www.youtube.com/@MeatEaterTV",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Butchering and meat processing",
+          "channels": [
+            {
+              "title": "The Bearded Butchers",
+              "url": "https://www.youtube.com/@TheBeardedButchers",
+              "verified": true
+            },
+            {
+              "title": "Homesteading Family",
+              "url": "https://www.youtube.com/@HomesteadingFamily",
+              "verified": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Water, energy, and shelter",
+      "subsections": [
+        {
+          "title": "Water purification and collection (filters, boiling, rain barrels, wells)",
+          "channels": [
+            {
+              "title": "Canadian Prepper",
+              "url": "https://www.youtube.com/@CanadianPrepper",
+              "verified": true
+            },
+            {
+              "title": "Engineer775",
+              "url": "https://www.youtube.com/@engineer775",
+              "verified": true
+            },
+            {
+              "title": "Wild Wonderful Off-Grid",
+              "url": "https://www.youtube.com/@WildWonderfulOffGrid",
+              "verified": true
+            },
+            {
+              "title": "Off Grid with Doug & Stacy",
+              "url": "https://www.youtube.com/@OFFGRIDwithDOUGSTACY",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Solar power and batteries (12V systems)",
+          "channels": [
+            {
+              "title": "Will Prowse",
+              "url": "https://www.youtube.com/@WillProwse",
+              "verified": true
+            },
+            {
+              "title": "Off Grid Garage",
+              "url": "https://www.youtube.com/@OffGridGarageAustralia",
+              "verified": true
+            },
+            {
+              "title": "Wild Wonderful Off-Grid",
+              "url": "https://www.youtube.com/@WildWonderfulOffGrid",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Natural building (earth, timber, off-grid cabins)",
+          "channels": [
+            {
+              "title": "Kris Harbour",
+              "url": "https://www.youtube.com/@KrisHarbour",
+              "verified": true
+            },
+            {
+              "title": "Wild Wonderful Off-Grid",
+              "url": "https://www.youtube.com/@WildWonderfulOffGrid",
+              "verified": true
+            },
+            {
+              "title": "Wranglerstar",
+              "url": "https://www.youtube.com/@wranglerstar",
+              "verified": true
+            },
+            {
+              "title": "Primitive Technology",
+              "url": "https://www.youtube.com/@primitivetechnology9550",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Insulation and heating (wood stoves, building science)",
+          "channels": [
+            {
+              "title": "Matt Risinger",
+              "url": "https://www.youtube.com/@buildshow",
+              "verified": true
+            },
+            {
+              "title": "Wranglerstar",
+              "url": "https://www.youtube.com/@wranglerstar",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Wilderness shelter (tarps, shelters, camping skills)",
+          "channels": [
+            {
+              "title": "Joe Robinet",
+              "url": "https://www.youtube.com/@therealjoerobinet",
+              "verified": true
+            },
+            {
+              "title": "TA Outdoors",
+              "url": "https://www.youtube.com/@TAOutdoors",
+              "verified": true
+            },
+            {
+              "title": "Far North Bushcraft and Survival",
+              "url": "https://www.youtube.com/@Far-North-Bushcraft-Survival",
+              "verified": true
+            },
+            {
+              "title": "Paul Kirtley",
+              "url": "https://www.youtube.com/@PaulKirtley",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Sanitation and hygiene (outdoor toilets, waste, soap making)",
+          "channels": [
+            {
+              "title": "Wild Wonderful Off-Grid",
+              "url": "https://www.youtube.com/@WildWonderfulOffGrid",
+              "verified": true
+            },
+            {
+              "title": "Royalty Soaps",
+              "url": "https://www.youtube.com/@RoyaltySoaps",
+              "verified": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Fire, rope, and bushcraft",
+      "subsections": [
+        {
+          "title": "Fire starting (matches, ferro rods, bow drills, wet weather)",
+          "channels": [
+            {
+              "title": "Far North Bushcraft and Survival",
+              "url": "https://www.youtube.com/@Far-North-Bushcraft-Survival",
+              "verified": true
+            },
+            {
+              "title": "Joe Robinet",
+              "url": "https://www.youtube.com/@therealjoerobinet",
+              "verified": true
+            },
+            {
+              "title": "Coalcracker Bushcraft",
+              "url": "https://www.youtube.com/@coalcracker",
+              "verified": true
+            },
+            {
+              "title": "Survival Lilly",
+              "url": "https://www.youtube.com/@SurvivalLilly",
+              "verified": true
+            },
+            {
+              "title": "Primitive Technology",
+              "url": "https://www.youtube.com/@primitivetechnology9550",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Knots and rope making",
+          "channels": [
+            {
+              "title": "Joe Robinet",
+              "url": "https://www.youtube.com/@therealjoerobinet",
+              "verified": true
+            },
+            {
+              "title": "Animated Knots by Grog",
+              "url": "https://www.youtube.com/@AnimatedKnotsbyGrog",
+              "verified": true
+            },
+            {
+              "title": "Survival Lilly",
+              "url": "https://www.youtube.com/@SurvivalLilly",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Axes, saws, and firewood (splitting, stacking, drying)",
+          "channels": [
+            {
+              "title": "Wranglerstar",
+              "url": "https://www.youtube.com/@wranglerstar",
+              "verified": true
+            },
+            {
+              "title": "Iz Turley",
+              "url": "https://www.youtube.com/@turleycustoms",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Choosing and sharpening knives",
+          "channels": [
+            {
+              "title": "Iz Turley",
+              "url": "https://www.youtube.com/@turleycustoms",
+              "verified": true
+            },
+            {
+              "title": "Cedric & Ada",
+              "url": "https://www.youtube.com/@CedricAda",
+              "verified": true
+            },
+            {
+              "title": "Outdoors55",
+              "url": "https://www.youtube.com/@Outdoors55",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Map and compass navigation",
+          "channels": [
+            {
+              "title": "Paul Kirtley",
+              "url": "https://www.youtube.com/@PaulKirtley",
+              "verified": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Woodworking and building",
+      "subsections": [
+        {
+          "title": "Hand-tool woodworking",
+          "channels": [
+            {
+              "title": "Paul Sellers",
+              "url": "https://www.youtube.com/@Paul.Sellers",
+              "verified": true
+            },
+            {
+              "title": "Rex Krueger",
+              "url": "https://www.youtube.com/@RexKrueger",
+              "verified": true
+            },
+            {
+              "title": "Wood by Wright",
+              "url": "https://www.youtube.com/@WoodByWrightHowTo",
+              "verified": true
+            },
+            {
+              "title": "Stavros Gakos",
+              "url": "https://www.youtube.com/@StavrosGakos",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Machine woodworking (furniture, sheds)",
+          "channels": [
+            {
+              "title": "Steve Ramsey (Woodworking for Mere Mortals)",
+              "url": "https://www.youtube.com/@SteveRamsey",
+              "verified": true
+            },
+            {
+              "title": "Matthias Wandel",
+              "url": "https://www.youtube.com/@matthiaswandel",
+              "verified": true
+            },
+            {
+              "title": "Fine Woodworking",
+              "url": "https://www.youtube.com/@FineWoodworking",
+              "verified": true
+            },
+            {
+              "title": "Stumpy Nubs",
+              "url": "https://www.youtube.com/@StumpyNubs",
+              "verified": true
+            },
+            {
+              "title": "Jay Bates",
+              "url": "https://www.youtube.com/@JayBates",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Joinery and carpentry (homebuilding)",
+          "channels": [
+            {
+              "title": "Wranglerstar",
+              "url": "https://www.youtube.com/@wranglerstar",
+              "verified": true
+            },
+            {
+              "title": "Matt Risinger",
+              "url": "https://www.youtube.com/@buildshow",
+              "verified": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Metalworking",
+      "subsections": [
+        {
+          "title": "Blacksmithing",
+          "channels": [
+            {
+              "title": "Black Bear Forge",
+              "url": "https://www.youtube.com/@BlackBearForge",
+              "verified": true
+            },
+            {
+              "title": "Torbjörn Åhman",
+              "url": "https://www.youtube.com/@torbjornahman",
+              "verified": true
+            },
+            {
+              "title": "Alec Steele",
+              "url": "https://www.youtube.com/@AlecSteele",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Welding",
+          "channels": [
+            {
+              "title": "Weld.com",
+              "url": "https://www.youtube.com/@Welddotcom",
+              "verified": true
+            },
+            {
+              "title": "Welding Tips and Tricks (Jody Collier)",
+              "url": "https://www.youtube.com/@weldingtipsandtricks",
+              "verified": true
+            },
+            {
+              "title": "Kevin Caron",
+              "url": "https://www.youtube.com/@KevincaronSculpture",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Metal turning and milling (machine shop)",
+          "channels": [
+            {
+              "title": "Blondihacks",
+              "url": "https://www.youtube.com/@Blondihacks",
+              "verified": true
+            },
+            {
+              "title": "mrpete222 (tubalcain)",
+              "url": "https://www.youtube.com/@mrpete222",
+              "verified": true
+            },
+            {
+              "title": "This Old Tony",
+              "url": "https://www.youtube.com/@ThisOldTony",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Making tools from scrap (general fabrication)",
+          "channels": [
+            {
+              "title": "Jimmy DiResta",
+              "url": "https://www.youtube.com/@jimmydiresta",
+              "verified": true
+            },
+            {
+              "title": "Jeremy Schmidt",
+              "url": "https://www.youtube.com/@Jer_Schmidt",
+              "verified": true
+            },
+            {
+              "title": "Laura Kampf",
+              "url": "https://www.youtube.com/@laurakampf",
+              "verified": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Textiles and leather",
+      "subsections": [
+        {
+          "title": "Sewing (machine and hand sewing)",
+          "channels": [
+            {
+              "title": "Anita by Design",
+              "url": "https://www.youtube.com/@AnitabyDesign",
+              "verified": true
+            },
+            {
+              "title": "Sewing Therapy",
+              "url": "https://www.youtube.com/@SewingTherapy",
+              "verified": true
+            },
+            {
+              "title": "Sew Sew Live",
+              "url": "https://www.youtube.com/@SewSewLive",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Knitting and crochet",
+          "channels": [
+            {
+              "title": "VeryPink Knits",
+              "url": "https://www.youtube.com/@verypinkknits",
+              "verified": true
+            },
+            {
+              "title": "Studio Knit",
+              "url": "https://www.youtube.com/@studioknit",
+              "verified": true
+            },
+            {
+              "title": "Sheep & Stitch",
+              "url": "https://www.youtube.com/@sheepandstitch",
+              "verified": true
+            },
+            {
+              "title": "Happy Berry Knitting",
+              "url": "https://www.youtube.com/@HappyBerryKnitting",
+              "verified": true
+            },
+            {
+              "title": "Knitty Natty",
+              "url": "https://www.youtube.com/@KnittyNatty",
+              "verified": true
+            },
+            {
+              "title": "Patty Lyons",
+              "url": "https://www.youtube.com/@PattyLyonsKnitting",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Leatherworking (shoes, belts, bags)",
+          "channels": [
+            {
+              "title": "Corter Leather",
+              "url": "https://www.youtube.com/@Corter",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Natural crafts (basket weaving, pottery, rope)",
+          "channels": [
+            {
+              "title": "Primitive Technology",
+              "url": "https://www.youtube.com/@primitivetechnology9550",
+              "verified": true
+            },
+            {
+              "title": "Survival Lilly",
+              "url": "https://www.youtube.com/@SurvivalLilly",
+              "verified": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Health",
+      "subsections": [
+        {
+          "title": "First aid and emergency medicine",
+          "channels": [
+            {
+              "title": "Dr. Bones and Nurse Amy",
+              "url": "https://www.youtube.com/@DrBonesNurseAmy",
+              "verified": true
+            },
+            {
+              "title": "The Red Cross",
+              "url": "https://www.youtube.com/@RodeKruis",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Herbal medicine",
+          "channels": [
+            {
+              "title": "Herbs with Rosalee",
+              "url": "https://www.youtube.com/@HerbsWithRosalee",
+              "verified": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Technology and repair",
+      "subsections": [
+        {
+          "title": "Bicycle maintenance",
+          "channels": [
+            {
+              "title": "Park Tool",
+              "url": "https://www.youtube.com/@parktool",
+              "verified": true
+            },
+            {
+              "title": "GCN",
+              "url": "https://www.youtube.com/@gcn",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Engines and vehicles",
+          "channels": [
+            {
+              "title": "ChrisFix",
+              "url": "https://www.youtube.com/@chrisfix",
+              "verified": true
+            },
+            {
+              "title": "Engineering Explained",
+              "url": "https://www.youtube.com/@EngineeringExplained",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Electronics and basic electrical work",
+          "channels": [
+            {
+              "title": "EEVblog",
+              "url": "https://www.youtube.com/@EEVblog",
+              "verified": true
+            },
+            {
+              "title": "GreatScott!",
+              "url": "https://www.youtube.com/@greatscottlab",
+              "verified": true
+            },
+            {
+              "title": "Electrician U",
+              "url": "https://www.youtube.com/@electricianu",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Plumbing",
+          "channels": [
+            {
+              "title": "Roger Wakefield",
+              "url": "https://www.youtube.com/@RogerWakefield",
+              "verified": true
+            },
+            {
+              "title": "Home Repair Tutor",
+              "url": "https://www.youtube.com/@HomeRepairTutor",
+              "verified": true
+            }
+          ]
+        },
+        {
+          "title": "Emergency communications (walkie-talkies, amateur radio)",
+          "channels": [
+            {
+              "title": "Ham Radio Crash Course",
+              "url": "https://www.youtube.com/@HamRadioCrashCourse",
+              "verified": true
+            },
+            {
+              "title": "Ham Radio 2.0",
+              "url": "https://www.youtube.com/@HamRadio2",
+              "verified": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Broad self-sufficiency channels",
+      "subsections": [
+        {
+          "title": "Channels covering multiple skills",
+          "channels": [
+            {
+              "title": "Off Grid with Doug & Stacy",
+              "url": "https://www.youtube.com/@OFFGRIDwithDOUGSTACY",
+              "verified": true
+            },
+            {
+              "title": "Homesteading Family",
+              "url": "https://www.youtube.com/@HomesteadingFamily",
+              "verified": true
+            },
+            {
+              "title": "Wranglerstar",
+              "url": "https://www.youtube.com/@wranglerstar",
+              "verified": true
+            },
+            {
+              "title": "Wild Wonderful Off-Grid",
+              "url": "https://www.youtube.com/@WildWonderfulOffGrid",
+              "verified": true
+            },
+            {
+              "title": "RoseRed Homestead",
+              "url": "https://www.youtube.com/@RoseRedHomestead",
+              "verified": true
+            },
+            {
+              "title": "Becky's Homestead",
+              "url": "https://www.youtube.com/@BeckysHomestead",
+              "verified": true
+            },
+            {
+              "title": "Primitive Technology",
+              "url": "https://www.youtube.com/@primitivetechnology9550",
+              "verified": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }

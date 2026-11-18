@@ -37,7 +37,7 @@ This file is the durable product requirements list for the downloader frontend a
 ## Channel bookmarks and synchronization
 
 - Add a **My Channels** navigation item below **Overview** and show saved channel bookmarks there; omit a separate channel-import navigation item.
-- Add a **Suggestions** page below **My Channels**, backed by `docs/skills/suggestions.json`, showing verified YouTube channels from the self-reliance skills guide. Each suggestion can be added to My Channels; adding it does not enable auto-sync.
+- Add a **Suggestions** page below **My Channels**, backed by `docs/skills/suggestions.json`, grouping verified YouTube channels under the main sections and subsections from the self-reliance skills guide. Each suggestion can be added to My Channels; adding it does not enable auto-sync.
 - Add a separate **Sync progress** navigation item below **Suggestions** and show sync progress grouped by channel on that page.
 - After adding a channel, keep the user on the My Channels page and show the new channel in the bookmark list.
 - Keep Sync progress off the Kanalen page itself.

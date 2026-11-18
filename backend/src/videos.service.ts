@@ -21,7 +21,9 @@ const ID_RE = /^[A-Za-z0-9_-]{11}$/;
 // Bestandsnaam: "Titel [videoId].mp4" (zie output-template hieronder)
 const FILE_ID_RE = /\[([A-Za-z0-9_-]{11})\]\.[^.]+$/;
 export interface ChannelBookmark { url: string; title: string; addedAt: string; autoSync: boolean; }
-export interface ChannelSuggestion { title: string; url: string; categories: string[]; }
+export interface ChannelSuggestion { title: string; url: string; verified: boolean; }
+export interface ChannelSuggestionSubsection { title: string; channels: ChannelSuggestion[]; }
+export interface ChannelSuggestionSection { title: string; subsections: ChannelSuggestionSubsection[]; }
 
 @Injectable()
 export class VideosService implements OnModuleInit {
@@ -214,9 +216,9 @@ export class VideosService implements OnModuleInit {
     catch { return []; }
   }
 
-  async getSuggestions(): Promise<ChannelSuggestion[]> {
-    const data = JSON.parse(await readFile(this.suggestionsPath, 'utf8')) as { suggestions: ChannelSuggestion[] };
-    return data.suggestions;
+  async getSuggestions(): Promise<ChannelSuggestionSection[]> {
+    const data = JSON.parse(await readFile(this.suggestionsPath, 'utf8')) as { sections: ChannelSuggestionSection[] };
+    return data.sections;
   }
 
   async addChannel(channelUrl: string) {

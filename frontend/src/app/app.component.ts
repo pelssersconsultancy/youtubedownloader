@@ -6,7 +6,9 @@ import { EMPTY, catchError, interval, startWith, switchMap } from 'rxjs';
 interface Video { id: string; title: string; thumbnail: string; duration: number | null; keywords: string[]; }
 interface Settings { downloadDir: string | null; maxParallelDownloads: number; cookiesBrowser: string; syncEnabled: boolean; language: 'en' | 'nl'; }
 interface Channel { url: string; title: string; addedAt: string; autoSync: boolean; }
-interface Suggestion { title: string; url: string; categories: string[]; }
+interface Suggestion { title: string; url: string; verified: boolean; }
+interface SuggestionSubsection { title: string; channels: Suggestion[]; }
+interface SuggestionSection { title: string; subsections: SuggestionSubsection[]; }
 interface VideoPage { items: Video[]; total: number; offset: number; hasMore: boolean; scanning?: boolean; }
 interface SyncVideo { id: string; title: string; thumbnail: string; progress: number; }
 interface ChannelSyncProgress extends Channel {
@@ -157,23 +159,30 @@ const API = '/api';
                      [value]="suggestionQuery()" (input)="suggestionQuery.set($any($event.target).value)" />
             </div>
             @if (suggestionsLoading()) { <p class="count">{{ t('Loading suggestions…', 'Suggesties laden…') }}</p> }
-            <div class="suggestion-list">
-              @for (suggestion of filteredSuggestions(); track suggestion.url) {
-                <article class="suggestion-item">
-                  <div class="suggestion-info">
-                    <h2>{{ suggestion.title }}</h2>
-                    <p>{{ suggestion.categories.join(' · ') }}</p>
-                  </div>
-                  <a class="suggestion-link" [href]="suggestion.url" target="_blank" rel="noopener noreferrer">YouTube ↗</a>
-                  <button type="button" [disabled]="isSuggestionAdded(suggestion) || addingSuggestionUrl() !== null"
-                          (click)="addSuggestedChannel(suggestion)">
-                    {{ isSuggestionAdded(suggestion) ? t('Added to My Channels', 'Toegevoegd aan Mijn kanalen') : addingSuggestionUrl() === suggestion.url ? t('Adding…', 'Toevoegen…') : t('Add to my Channels', 'Toevoegen aan Mijn kanalen') }}
-                  </button>
-                </article>
-              } @empty {
-                @if (!suggestionsLoading()) { <p class="empty">{{ t('No matching suggestions.', 'Geen passende suggesties.') }}</p> }
-              }
-            </div>
+            @for (section of filteredSuggestionSections(); track section.title) {
+              <section class="suggestion-section">
+                <h2>{{ section.title }}</h2>
+                @for (subsection of section.subsections; track subsection.title) {
+                  <section class="suggestion-subsection">
+                    <h3>{{ subsection.title }}</h3>
+                    <div class="suggestion-list">
+                      @for (suggestion of subsection.channels; track suggestion.url) {
+                        <article class="suggestion-item">
+                          <div class="suggestion-info"><h4>{{ suggestion.title }}</h4></div>
+                          <a class="suggestion-link" [href]="suggestion.url" target="_blank" rel="noopener noreferrer">YouTube ↗</a>
+                          <button type="button" [disabled]="isSuggestionAdded(suggestion) || addingSuggestionUrl() !== null"
+                                  (click)="addSuggestedChannel(suggestion)">
+                            {{ isSuggestionAdded(suggestion) ? t('Added to My Channels', 'Toegevoegd aan Mijn kanalen') : addingSuggestionUrl() === suggestion.url ? t('Adding…', 'Toevoegen…') : t('Add to my Channels', 'Toevoegen aan Mijn kanalen') }}
+                          </button>
+                        </article>
+                      }
+                    </div>
+                  </section>
+                }
+              </section>
+            } @empty {
+              @if (!suggestionsLoading()) { <p class="empty">{{ t('No matching suggestions.', 'Geen passende suggesties.') }}</p> }
+            }
           </section>
         } @else if (page() === 'sync-progress') {
           <section class="sync-progress-page" aria-live="polite">
@@ -524,12 +533,15 @@ const API = '/api';
     .channel-item strong { font-size: 13px; font-weight: 600; }
     .channel-item small { color: #71819d; font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
     .suggestions-page > p { color: #8d9db7; font-size: 13px; }
-    .suggestion-list { display: grid; gap: 9px; margin-top: 18px; }
-    .suggestion-item { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(120px, 220px) auto; gap: 16px; align-items: center;
+    .suggestion-section { margin-top: 28px; }
+    .suggestion-section > h2 { margin: 0 0 16px; padding-bottom: 10px; border-bottom: 1px solid rgba(72, 217, 255, .2); color: #eaf6ff; font-size: 21px; }
+    .suggestion-subsection { margin: 20px 0 0 12px; }
+    .suggestion-subsection > h3 { margin: 0 0 10px; color: #a8c2df; font-size: 15px; font-weight: 550; }
+    .suggestion-list { display: grid; gap: 8px; }
+    .suggestion-item { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(90px, 150px) auto; gap: 14px; align-items: center;
       padding: 13px 15px; border: 1px solid rgba(129, 164, 220, .12); border-radius: 10px; background: rgba(16, 24, 43, .78); }
     .suggestion-info { min-width: 0; }
-    .suggestion-info h2 { margin: 0; font-size: 14px; font-weight: 600; }
-    .suggestion-info p { margin: 4px 0 0; color: #8191ad; font-size: 11px; }
+    .suggestion-info h4 { margin: 0; font-size: 14px; font-weight: 600; }
     .suggestion-link { color: #73dfff; font-size: 12px; text-decoration: none; }
     .suggestion-link:hover { text-decoration: underline; }
     .channel-progress-card { padding: 20px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(135deg, rgba(17, 26, 47, .94), rgba(13, 19, 36, .88)); box-shadow: 0 15px 40px rgba(0,0,0,.15); }
@@ -590,9 +602,10 @@ const API = '/api';
       .setting-field { align-items: flex-start; flex-direction: column; gap: 6px; }
       .setting-field select { max-width: 100%; }
       .sync-controls { align-items: flex-start; flex-direction: column; }
-      .suggestion-item { grid-template-columns: 1fr auto; }
-      .suggestion-link { grid-column: 1; }
-      .suggestion-item button { grid-column: 2; grid-row: 1 / span 2; }
+      .suggestion-section > h2 { font-size: 18px; }
+      .suggestion-subsection { margin-left: 4px; }
+      .suggestion-item { grid-template-columns: minmax(0, 1fr); }
+      .suggestion-link, .suggestion-item button { grid-column: auto; grid-row: auto; }
     }
   `],
 })
@@ -605,7 +618,7 @@ export class AppComponent {
   videos = signal<Video[]>([]);
   playingVideo = signal<Video | null>(null);
   channels = signal<Channel[]>([]);
-  suggestions = signal<Suggestion[]>([]);
+  suggestions = signal<SuggestionSection[]>([]);
   suggestionQuery = signal('');
   suggestionsLoading = signal(false);
   addingSuggestionUrl = signal<string | null>(null);
@@ -658,12 +671,22 @@ export class AppComponent {
   });
 
   visibleVideos = computed(() => this.videos().slice(this.virtualStart(), this.virtualStart() + this.pageSize));
-  filteredSuggestions = computed(() => {
+  filteredSuggestionSections = computed(() => {
     const query = this.suggestionQuery().trim().toLocaleLowerCase();
     if (!query) return this.suggestions();
-    return this.suggestions().filter((suggestion) =>
-      `${suggestion.title} ${suggestion.categories.join(' ')}`.toLocaleLowerCase().includes(query),
-    );
+    return this.suggestions().map((section) => {
+      const sectionMatches = section.title.toLocaleLowerCase().includes(query);
+      const subsections = section.subsections.map((subsection) => {
+        const subsectionMatches = subsection.title.toLocaleLowerCase().includes(query);
+        return {
+          ...subsection,
+          channels: subsection.channels.filter((channel) =>
+            sectionMatches || subsectionMatches || channel.title.toLocaleLowerCase().includes(query),
+          ),
+        };
+      }).filter((subsection) => subsection.channels.length);
+      return { ...section, subsections };
+    }).filter((section) => section.subsections.length);
   });
   visibleChannelVideos = computed(() => this.importVideos().slice(this.channelVirtualStart(), this.channelVirtualStart() + this.pageSize));
   channelVirtualBottom = computed(() => Math.max(0, (this.importVideos().length - this.channelVirtualStart() - this.visibleChannelVideos().length) * this.channelRowHeight));
@@ -794,7 +817,7 @@ export class AppComponent {
 
   loadSuggestions() {
     this.suggestionsLoading.set(true);
-    this.http.get<Suggestion[]>(`${API}/suggestions`).subscribe({
+    this.http.get<SuggestionSection[]>(`${API}/suggestions`).subscribe({
       next: (suggestions) => { this.suggestions.set(suggestions); this.suggestionsLoading.set(false); },
       error: () => {
         this.suggestionsLoading.set(false);
