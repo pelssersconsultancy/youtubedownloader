@@ -1,0 +1,21 @@
+# Dependencies and generated output
+**/node_modules/
+**/dist/
+**/.angular/cache/
+**/coverage/
+**/*.tsbuildinfo
+
+# Local configuration and runtime files
+**/.env
+!**/.env.example
+**/logs/
+**/*.log
+**/videos.json
+**/settings.json
+**/sync-queue.json
+
+# Operating system files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
