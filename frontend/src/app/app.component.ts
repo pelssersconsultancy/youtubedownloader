@@ -66,6 +66,7 @@ interface State {
   active?: SyncVideo[];
   queuedItems?: SyncVideo[];
   syncEnabled: boolean;
+  retryAt?: number | null;
   failed: string[];
 }
 
@@ -491,6 +492,16 @@ const API = '/api';
                 }}
               </button>
             </div>
+            @if (isRateLimitCoolingDown()) {
+              <p class="count rate-limit-notice">
+                {{
+                  t(
+                    'YouTube rate-limited this account. Downloads remain queued and will retry in about ',
+                    'YouTube heeft dit account tijdelijk beperkt. Downloads blijven in de wachtrij en worden over ongeveer '
+                  )
+                }}{{ retryMinutes() }} {{ t('min.', 'min. opnieuw geprobeerd.') }}
+              </p>
+            }
             @for (channel of syncProgress(); track channel.url) {
               <article class="channel-progress-card">
                 <div class="channel-progress-heading">
@@ -2888,5 +2899,15 @@ export class AppComponent {
 
   t(english: string, dutch: string) {
     return this.language() === 'nl' ? dutch : english;
+  }
+
+  retryMinutes() {
+    const retryAt = this.state().retryAt;
+    return retryAt ? Math.max(1, Math.ceil((retryAt - Date.now()) / 60_000)) : 0;
+  }
+
+  isRateLimitCoolingDown() {
+    const retryAt = this.state().retryAt;
+    return typeof retryAt === 'number' && retryAt > Date.now();
   }
 }

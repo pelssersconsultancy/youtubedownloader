@@ -37,6 +37,7 @@ export class VideosService implements OnModuleInit {
   private readonly channelCacheDir = join(this.dataDir, 'channel-cache');
   private readonly queuePath = join(this.dataDir, 'sync-queue.json');
   private readonly subtitleQueuePath = join(this.dataDir, 'subtitle-queue.json');
+  private readonly rateLimitPath = join(this.dataDir, 'rate-limit.json');
   private readonly failureLogPath = join(this.dataDir, 'sync-failures.log');
   private readonly suggestionsPath = process.env.SUGGESTIONS_PATH ?? resolve(process.cwd(), '../docs/skills/suggestions.json');
   private configuredDir: string | null = null;
@@ -54,6 +55,9 @@ export class VideosService implements OnModuleInit {
   private subtitleRateLimitAttempts = new Map<string, number>();
   private subtitleNextRunAt = 0;
   private subtitlePumpTimer: ReturnType<typeof setTimeout> | null = null;
+  private downloadNextRunAt = 0;
+  private downloadPumpTimer: ReturnType<typeof setTimeout> | null = null;
+  private rateLimitedDownloads = new Set<string>();
   private downloadProcesses = new Map<string, ChildProcess>();
   private maxParallelDownloads = 1;
   private syncEnabled = true;
@@ -86,6 +90,12 @@ export class VideosService implements OnModuleInit {
       this.subtitleQueue = [...new Set(savedSubtitleQueue.filter((id) => ID_RE.test(id) && downloaded.has(id)))];
       await this.saveSubtitleQueue();
     } catch { /* Subtitle work is queued after a video has completed. */ }
+    try {
+      const savedRetryAt = JSON.parse(await readFile(this.rateLimitPath, 'utf8')) as { retryAt?: number };
+      if (typeof savedRetryAt.retryAt === 'number' && savedRetryAt.retryAt > Date.now()) {
+        this.downloadNextRunAt = savedRetryAt.retryAt;
+      }
+    } catch { /* No saved YouTube rate limit cooldown. */ }
     if (this.configuredDir) {
       await this.prioritizeQueue();
       this.pump();
@@ -573,6 +583,8 @@ export class VideosService implements OnModuleInit {
       '--dump-json',
       '--ignore-errors',
       '--no-warnings',
+      '--sleep-requests',
+      '2',
       ...this.cookieArgs,
       target,
     ]);
@@ -622,6 +634,8 @@ export class VideosService implements OnModuleInit {
         '--flat-playlist',
         '--dump-json',
         '--no-warnings',
+        '--sleep-requests',
+        '2',
         ...this.cookieArgs,
         target,
       ]);
@@ -775,6 +789,8 @@ export class VideosService implements OnModuleInit {
         '3',
         '--retry-sleep',
         'http:exp=5:60',
+        '--sleep-requests',
+        '2',
         '--write-subs',
         '--write-auto-subs',
         '--sub-langs',
@@ -834,6 +850,7 @@ export class VideosService implements OnModuleInit {
       current: active[0] ?? null,
       active,
       syncEnabled: this.syncEnabled,
+      retryAt: this.downloadNextRunAt || null,
       failed: [...this.failed],
     };
   }
@@ -855,6 +872,15 @@ export class VideosService implements OnModuleInit {
   }
 
   private pump() {
+    const waitMs = this.downloadNextRunAt - Date.now();
+    if (waitMs > 0) {
+      this.scheduleDownloadPump(waitMs);
+      return;
+    }
+    if (this.downloadNextRunAt) {
+      this.downloadNextRunAt = 0;
+      void this.persist(this.rateLimitPath, { retryAt: 0 });
+    }
     while (this.syncEnabled && this.active.size < this.maxParallelDownloads && this.queue.length) {
       const nextIndex = this.queue.findIndex((id) => !this.active.has(id));
       if (nextIndex < 0) break;
@@ -870,7 +896,14 @@ export class VideosService implements OnModuleInit {
             console.error(`Ondertiteljob in wachtrij zetten mislukt voor ${id}: ${String(error)}`);
           });
         }
-        if (this.pausedIds.has(id)) {
+        if (!ok && this.rateLimitedDownloads.has(id)) {
+          this.rateLimitedDownloads.delete(id);
+          this.pausedIds.delete(id);
+          if (!this.queue.includes(id)) this.queue.unshift(id);
+          this.downloadNextRunAt = Date.now() + 60 * 60_000;
+          console.warn(`YouTube heeft de downloadsnelheid beperkt. Video ${id} blijft in de wachtrij; opnieuw proberen over ongeveer 1 uur.`);
+          await this.persist(this.rateLimitPath, { retryAt: this.downloadNextRunAt }).catch((error) => console.error(`Rate-limit wachttijd opslaan mislukt: ${String(error)}`));
+        } else if (this.pausedIds.has(id)) {
           this.pausedIds.delete(id);
           if (ok) this.queue = this.queue.filter((queuedId) => queuedId !== id);
           else await this.downloadedIds().then((done) => {
@@ -880,9 +913,21 @@ export class VideosService implements OnModuleInit {
           this.failed.add(id);
         }
         this.active.delete(id);
-        void this.saveQueue().catch(() => undefined).finally(() => this.pump());
+        void this.saveQueue().catch(() => undefined).finally(() => {
+          if (this.downloadNextRunAt > Date.now()) this.scheduleDownloadPump(this.downloadNextRunAt - Date.now());
+          else this.pump();
+        });
       });
     }
+  }
+
+  private scheduleDownloadPump(delayMs: number) {
+    if (this.downloadPumpTimer) clearTimeout(this.downloadPumpTimer);
+    this.downloadPumpTimer = setTimeout(() => {
+      this.downloadPumpTimer = null;
+      this.pump();
+    }, delayMs);
+    this.downloadPumpTimer.unref?.();
   }
 
   private run(id: string): Promise<boolean> {
@@ -892,6 +937,16 @@ export class VideosService implements OnModuleInit {
       const p = spawn(this.ytdlp, [
         '--no-playlist',
         '--newline',
+        '--sleep-requests',
+        '2',
+        '--sleep-interval',
+        '5',
+        '--max-sleep-interval',
+        '10',
+        '--retries',
+        '3',
+        '--retry-sleep',
+        'http:exp=5:60',
         '-f',
         'bv*[height<=1080]+ba/b[height<=1080]',
         '--merge-output-format',
@@ -916,7 +971,9 @@ export class VideosService implements OnModuleInit {
         if (settled) return;
         settled = true;
         this.downloadProcesses.delete(id);
-        if (!ok && !this.pausedIds.has(id)) {
+        const rateLimited = /account has been rate-limited by YouTube|rate-limited.{0,40}(?:hour|minute)|HTTP Error 429|Too Many Requests/i.test(stderr);
+        if (rateLimited) this.rateLimitedDownloads.add(id);
+        if (!ok && !rateLimited && !this.pausedIds.has(id)) {
           try { await this.recordFailure(id, stderr || reason); }
           catch (error) { console.error(`Faallog opslaan mislukt voor ${id}: ${String(error)}`); }
         }

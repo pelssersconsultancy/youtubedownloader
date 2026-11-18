@@ -33,6 +33,7 @@ This file is the durable product requirements list for the downloader frontend a
 - Make overview video cards show a pointer cursor and a slightly darker background on hover.
 - Open a player for a downloaded local video when its overview card is clicked.
 - Download available English and Dutch manual or auto-generated subtitles in a separate persistent queue so subtitle failures never fail video downloads; retry YouTube HTTP 429 rate limits with increasing delays while keeping the job queued, and space out subtitle requests. Serve subtitles as WebVTT tracks and automatically show the track matching the persisted app language. Fetch missing subtitle sidecars on first playback for videos already downloaded.
+- Space YouTube extraction and video requests by 5–10 seconds; when YouTube reports an account rate limit, keep the video queued, persist an approximately one-hour cooldown across restarts, and show the retry delay in Sync progress instead of recording a permanent failure.
 
 ## Channel bookmarks and synchronization
 
