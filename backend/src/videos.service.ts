@@ -31,6 +31,7 @@ export class VideosService implements OnModuleInit {
   private readonly channelsPath = join(this.dataDir, 'channels.json');
   private readonly channelCacheDir = join(this.dataDir, 'channel-cache');
   private readonly queuePath = join(this.dataDir, 'sync-queue.json');
+  private readonly subtitleQueuePath = join(this.dataDir, 'subtitle-queue.json');
   private readonly failureLogPath = join(this.dataDir, 'sync-failures.log');
   private configuredDir: string | null = process.env.DOWNLOAD_DIR ? resolve(process.env.DOWNLOAD_DIR) : null;
   private readonly ytdlp = process.env.YTDLP_PATH ?? 'yt-dlp';
@@ -38,16 +39,20 @@ export class VideosService implements OnModuleInit {
   private language: 'en' | 'nl' = 'en';
 
   private queue: string[] = [];
+  private subtitleQueue: string[] = [];
   private active = new Map<string, { progress: number }>();
+  private activeSubtitleDownloads = new Set<string>();
   private downloadProcesses = new Map<string, ChildProcess>();
   private maxParallelDownloads = 1;
   private syncEnabled = true;
   private pausedIds = new Set<string>();
   private failed = new Set<string>();
   private queueWrite = Promise.resolve();
+  private subtitleQueueWrite = Promise.resolve();
   private failureLogWrite = Promise.resolve();
   private channelScans = new Map<string, Promise<VideoInfo[]>>();
-  private subtitleDownloads = new Map<string, Promise<void>>();
+  private subtitleDownloads = new Map<string, { promise: Promise<void>; resolve: () => void }>();
+  private subtitleAttempts = new Set<string>();
   private channelVideoCache = new Map<string, VideoInfo[]>();
 
   constructor() {
@@ -63,9 +68,16 @@ export class VideosService implements OnModuleInit {
       this.queue = [...new Set(savedQueue.filter((id) => ID_RE.test(id) && !downloaded.has(id)))];
       await this.saveQueue();
     } catch { /* No pending sync work yet. */ }
+    try {
+      const savedSubtitleQueue = JSON.parse(await readFile(this.subtitleQueuePath, 'utf8')) as string[];
+      const downloaded = new Set(await this.downloadedIds());
+      this.subtitleQueue = [...new Set(savedSubtitleQueue.filter((id) => ID_RE.test(id) && downloaded.has(id)))];
+      await this.saveSubtitleQueue();
+    } catch { /* Subtitle work is queued after a video has completed. */ }
     if (this.configuredDir) {
       await this.prioritizeQueue();
       this.pump();
+      this.pumpSubtitleQueue();
       void this.scanBookmarkedChannelsOnStartup();
     }
   }
@@ -399,6 +411,13 @@ export class VideosService implements OnModuleInit {
     return this.queueWrite;
   }
 
+  private saveSubtitleQueue() {
+    const snapshot = [...this.subtitleQueue];
+    this.subtitleQueueWrite = this.subtitleQueueWrite.catch(() => undefined)
+      .then(() => this.persist(this.subtitleQueuePath, snapshot));
+    return this.subtitleQueueWrite;
+  }
+
   private async saveVideos(videos: VideoInfo[]) {
     let catalog: Record<string, VideoInfo> = {};
     try { catalog = JSON.parse(await readFile(this.catalogPath, 'utf8')) as Record<string, VideoInfo>; }
@@ -633,10 +652,48 @@ export class VideosService implements OnModuleInit {
   }
 
   private async ensureDownloadedSubtitles(id: string) {
-    const pending = this.subtitleDownloads.get(id);
-    if (pending) return pending;
+    if (this.subtitleAttempts.has(id)) return;
+    let task = this.subtitleDownloads.get(id);
+    if (!task) {
+      let resolve!: () => void;
+      const promise = new Promise<void>((done) => { resolve = done; });
+      task = { promise, resolve };
+      this.subtitleDownloads.set(id, task);
+      if (!this.subtitleQueue.includes(id) && !this.activeSubtitleDownloads.has(id)) {
+        this.subtitleQueue.push(id);
+        try { await this.saveSubtitleQueue(); }
+        catch (error) {
+          this.subtitleQueue = this.subtitleQueue.filter((queuedId) => queuedId !== id);
+          this.subtitleDownloads.delete(id);
+          task.resolve();
+          throw error;
+        }
+      }
+      this.pumpSubtitleQueue();
+    }
+    await task.promise;
+  }
 
-    const download = new Promise<void>((done) => {
+  private pumpSubtitleQueue() {
+    if (!this.configuredDir || this.activeSubtitleDownloads.size) return;
+    const id = this.subtitleQueue.find((queuedId) => !this.activeSubtitleDownloads.has(queuedId));
+    if (!id) return;
+    this.activeSubtitleDownloads.add(id);
+    void this.downloadSubtitles(id).catch((error) => {
+      console.error(`Ondertitelproces mislukt voor ${id}: ${String(error)}`);
+    }).finally(() => {
+      this.activeSubtitleDownloads.delete(id);
+      this.subtitleQueue = this.subtitleQueue.filter((queuedId) => queuedId !== id);
+      this.subtitleAttempts.add(id);
+      this.subtitleDownloads.get(id)?.resolve();
+      this.subtitleDownloads.delete(id);
+      void this.saveSubtitleQueue().catch((error) => console.error(`Ondertitelwachtrij opslaan mislukt: ${String(error)}`));
+      this.pumpSubtitleQueue();
+    });
+  }
+
+  private downloadSubtitles(id: string) {
+    return new Promise<void>((done) => {
       let stderr = '';
       const child = spawn(this.ytdlp, [
         '--no-playlist',
@@ -654,9 +711,7 @@ export class VideosService implements OnModuleInit {
         join(this.downloadDir, '%(title)s [%(id)s].%(ext)s'),
         `https://www.youtube.com/watch?v=${id}`,
       ]);
-      child.stderr.on('data', (chunk) => {
-        stderr = `${stderr}${String(chunk)}`.slice(-8000);
-      });
+      child.stderr.on('data', (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-8000); });
       child.on('error', (error) => {
         console.error(`Ondertitels ophalen mislukt voor ${id}: ${error.message}`);
         done();
@@ -666,10 +721,6 @@ export class VideosService implements OnModuleInit {
         done();
       });
     });
-
-    this.subtitleDownloads.set(id, download);
-    try { await download; }
-    finally { this.subtitleDownloads.delete(id); }
   }
 
   async getDownloadedSubtitlePath(id: string, language: string) {
@@ -739,6 +790,11 @@ export class VideosService implements OnModuleInit {
         try { await this.recordFailure(id, String(error)); } catch { /* Keep the queue moving. */ }
         return false;
       }).then(async (ok) => {
+        if (ok) {
+          void this.ensureDownloadedSubtitles(id).catch((error) => {
+            console.error(`Ondertiteljob in wachtrij zetten mislukt voor ${id}: ${String(error)}`);
+          });
+        }
         if (this.pausedIds.has(id)) {
           this.pausedIds.delete(id);
           if (ok) this.queue = this.queue.filter((queuedId) => queuedId !== id);
@@ -761,14 +817,6 @@ export class VideosService implements OnModuleInit {
       const p = spawn(this.ytdlp, [
         '--no-playlist',
         '--newline',
-        '--write-subs',
-        '--write-auto-subs',
-        '--sub-langs',
-        'en.*,nl.*',
-        '--sub-format',
-        'vtt/best',
-        '--convert-subs',
-        'vtt',
         '-f',
         'bv*[height<=1080]+ba/b[height<=1080]',
         '--merge-output-format',
