@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 import { mkdirSync } from 'fs';
-import { access, appendFile, readFile, readdir, rename, writeFile } from 'fs/promises';
+import { appendFile, readFile, readdir, rename, writeFile } from 'fs/promises';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 import { createInterface } from 'node:readline';
@@ -117,30 +117,30 @@ export class VideosService implements OnModuleInit {
   }
 
   async getSettings() {
+    let saved: {
+      downloadDir?: string; maxParallelDownloads?: number; cookiesBrowser?: string; syncEnabled?: boolean; language?: string;
+    } = {};
     try {
-      const saved = JSON.parse(await readFile(this.settingsPath, 'utf8')) as {
-        downloadDir?: string; maxParallelDownloads?: number; cookiesBrowser?: string; syncEnabled?: boolean; language?: string;
-      };
-      if (saved.downloadDir) {
-        this.configuredDir = resolve(saved.downloadDir);
-        if (process.env.APP_DATA_DIR && this.defaultDownloadDir) {
-          try { await access(this.configuredDir); }
-          catch {
-            this.configuredDir = this.defaultDownloadDir;
-            await this.persist(this.settingsPath, this.settingsData(this.configuredDir));
-          }
-        }
+      saved = JSON.parse(await readFile(this.settingsPath, 'utf8')) as typeof saved;
+    } catch { /* First run: use defaults. */ }
+
+    if (this.defaultDownloadDir) {
+      this.configuredDir = this.defaultDownloadDir;
+      if (saved.downloadDir !== this.defaultDownloadDir) {
+        await this.persist(this.settingsPath, this.settingsData(this.configuredDir));
       }
-      else if (!this.configuredDir && this.defaultDownloadDir) this.configuredDir = this.defaultDownloadDir;
-      if (Number.isInteger(saved.maxParallelDownloads) && saved.maxParallelDownloads! >= 1) {
-        this.maxParallelDownloads = Math.min(saved.maxParallelDownloads!, 8);
-      }
-      if (saved.cookiesBrowser && VideosService.COOKIE_BROWSERS.includes(saved.cookiesBrowser as typeof VideosService.COOKIE_BROWSERS[number])) this.cookiesBrowser = saved.cookiesBrowser;
-      if (typeof saved.syncEnabled === 'boolean') this.syncEnabled = saved.syncEnabled;
-      if (saved.language === 'en' || saved.language === 'nl') this.language = saved.language;
-    } catch { /* First run: ask the user to choose settings. */ }
+    } else if (saved.downloadDir) {
+      this.configuredDir = resolve(saved.downloadDir);
+    }
+    if (Number.isInteger(saved.maxParallelDownloads) && saved.maxParallelDownloads! >= 1) {
+      this.maxParallelDownloads = Math.min(saved.maxParallelDownloads!, 8);
+    }
+    if (saved.cookiesBrowser && VideosService.COOKIE_BROWSERS.includes(saved.cookiesBrowser as typeof VideosService.COOKIE_BROWSERS[number])) this.cookiesBrowser = saved.cookiesBrowser;
+    if (typeof saved.syncEnabled === 'boolean') this.syncEnabled = saved.syncEnabled;
+    if (saved.language === 'en' || saved.language === 'nl') this.language = saved.language;
     return {
       downloadDir: this.configuredDir,
+      downloadDirFixed: !!this.defaultDownloadDir,
       maxParallelDownloads: this.maxParallelDownloads,
       cookiesBrowser: this.cookiesBrowser,
       syncEnabled: this.syncEnabled,
@@ -201,6 +201,11 @@ export class VideosService implements OnModuleInit {
   }
 
   async setDownloadDir(path: string) {
+    if (this.defaultDownloadDir) {
+      this.configuredDir = this.defaultDownloadDir;
+      await this.persist(this.settingsPath, this.settingsData(this.configuredDir));
+      return this.getSettings();
+    }
     const dir = resolve(path.trim());
     if (!path.trim()) throw new BadRequestException('Kies een geldige maplocatie');
     try { mkdirSync(dir, { recursive: true }); }

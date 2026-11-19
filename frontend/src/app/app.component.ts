@@ -12,6 +12,7 @@ interface Video {
 }
 interface Settings {
   downloadDir: string | null;
+  downloadDirFixed?: boolean;
   maxParallelDownloads: number;
   cookiesBrowser: string;
   syncEnabled: boolean;
@@ -148,7 +149,7 @@ const API = '/api';
           </button>
         </header>
 
-        @if (!state().dir || settingsOpen()) {
+        @if (settingsLoaded() && (!state().dir || settingsOpen())) {
           <section class="setup">
             <h2>
               {{
@@ -158,26 +159,37 @@ const API = '/api';
               }}
             </h2>
             <p>
-              {{
-                t(
-                  'Enter the full path to the folder where you want to save videos.',
-                  'Vul het volledige pad in van de map waarin je video’s wilt bewaren.'
-                )
-              }}
+              @if (storageLocationFixed()) {
+                {{
+                  t(
+                    'The video folder is set in Docker Desktop. Container path: /downloads. To change the host folder, update the volume mapping in Docker Desktop.',
+                    'De videomap is ingesteld in Docker Desktop. Containerpad: /downloads. Wijzig de volumekoppeling in Docker Desktop om de map op je computer te veranderen.'
+                  )
+                }}
+              } @else {
+                {{
+                  t(
+                    'Enter the full path to the folder where you want to save videos.',
+                    'Vul het volledige pad in van de map waarin je video’s wilt bewaren.'
+                  )
+                }}
+              }
             </p>
             <form class="bar" (submit)="$event.preventDefault(); saveFolder()">
-              <input
-                type="text"
-                [placeholder]="
-                  t(
-                    'For example /Users/name/Movies/YouTube',
-                    'Bijvoorbeeld /Users/naam/Movies/YouTube'
-                  )
-                "
-                [value]="folderPath()"
-                (input)="folderPath.set($any($event.target).value)"
-              />
-              <button type="submit" [disabled]="savingFolder() || !folderPath().trim()">
+              @if (!storageLocationFixed()) {
+                <input
+                  type="text"
+                  [placeholder]="
+                    t(
+                      'For example /Users/name/Movies/YouTube',
+                      'Bijvoorbeeld /Users/naam/Movies/YouTube'
+                    )
+                  "
+                  [value]="folderPath()"
+                  (input)="folderPath.set($any($event.target).value)"
+                />
+              }
+              <button type="submit" [disabled]="savingFolder() || (!storageLocationFixed() && !folderPath().trim())">
                 {{
                   savingFolder()
                     ? t('Saving…', 'Opslaan…')
@@ -233,7 +245,7 @@ const API = '/api';
               }}
             </p>
           </section>
-        } @else if (page() === 'overview') {
+        } @else if (settingsLoaded() && page() === 'overview') {
           <section class="hero-banner">
             <div class="hero-copy">
               <span class="eyebrow">{{
@@ -320,7 +332,7 @@ const API = '/api';
               <p class="loading-more">{{ t('Loading more videos…', 'Volgende video’s laden…') }}</p>
             }
           </div>
-        } @else if (page() === 'channels') {
+        } @else if (settingsLoaded() && page() === 'channels') {
           <section class="channels-page">
             <p>
               {{
@@ -402,7 +414,7 @@ const API = '/api';
               }
             </ul>
           </section>
-        } @else if (page() === 'suggestions') {
+        } @else if (settingsLoaded() && page() === 'suggestions') {
           <section class="suggestions-page">
             <p>
               {{
@@ -471,7 +483,7 @@ const API = '/api';
               }
             }
           </section>
-        } @else if (page() === 'sync-progress') {
+        } @else if (settingsLoaded() && page() === 'sync-progress') {
           <section class="sync-progress-page" aria-live="polite">
             <div class="sync-controls">
               <p class="count">
@@ -577,7 +589,7 @@ const API = '/api';
               </p>
             }
           </section>
-        } @else {
+        } @else if (settingsLoaded()) {
           <p class="count">
             {{ channelTotal() }} {{ t('videos in this channel', 'video’s in dit kanaal') }} ·
             {{ importVideos().length }} {{ t('loaded', 'geladen') }}
@@ -2304,6 +2316,7 @@ export class AppComponent {
   maxParallelDownloads = signal(1);
   cookiesBrowser = signal('chrome');
   language = signal<'en' | 'nl'>('en');
+  storageLocationFixed = signal(false);
   syncToggleLoading = signal(false);
   importVideos = signal<Video[]>([]);
   channelTotal = signal(0);
@@ -2336,6 +2349,7 @@ export class AppComponent {
     failed: [],
   });
   settingsOpen = signal(false);
+  settingsLoaded = signal(false);
   folderPath = signal('');
   savingFolder = signal(false);
   loading = signal(false);
@@ -2409,22 +2423,26 @@ export class AppComponent {
     this.http.get<Settings>(`${API}/settings`).subscribe({
       next: (settings) => {
         const dir = settings.downloadDir ?? '';
+        this.storageLocationFixed.set(settings.downloadDirFixed === true);
         this.state.update((state) => ({ ...state, dir }));
         this.folderPath.set(dir);
         this.maxParallelDownloads.set(settings.maxParallelDownloads ?? 1);
         this.cookiesBrowser.set(settings.cookiesBrowser ?? 'chrome');
         this.language.set(settings.language === 'nl' ? 'nl' : 'en');
         this.state.update((state) => ({ ...state, syncEnabled: settings.syncEnabled ?? true }));
+        this.settingsLoaded.set(true);
         if (dir) this.fetchVideoPage(0, false);
         this.loadChannels();
       },
-      error: () =>
+      error: () => {
         this.error.set(
           this.t(
             'Cannot reach the backend at localhost:3000.',
             'Kan de backend niet bereiken op localhost:3000.',
           ),
-        ),
+        );
+        this.settingsLoaded.set(true);
+      },
     });
     this.loadSuggestions();
     // Houdt gedownload/wachtrij/voortgang actueel.
@@ -2817,6 +2835,7 @@ export class AppComponent {
       .subscribe({
         next: (settings) => {
           const dir = settings.downloadDir ?? '';
+          this.storageLocationFixed.set(settings.downloadDirFixed === true);
           this.state.update((state) => ({ ...state, dir }));
           this.folderPath.set(dir);
           this.maxParallelDownloads.set(settings.maxParallelDownloads ?? 1);
