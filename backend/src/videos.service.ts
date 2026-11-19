@@ -1,5 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { mkdirSync } from 'fs';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import { mkdirSync, statfsSync } from 'fs';
 import { readFile, readdir } from 'fs/promises';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
@@ -26,7 +26,7 @@ export interface ChannelSuggestionSubsection { title: string; channels: ChannelS
 export interface ChannelSuggestionSection { title: string; subsections: ChannelSuggestionSubsection[]; }
 
 @Injectable()
-export class VideosService implements OnModuleInit {
+export class VideosService implements OnModuleInit, OnModuleDestroy {
   private static readonly MAX_JOB_ATTEMPTS = 5;
   private static readonly MAX_ENRICHMENT = 2;
   private static readonly COOKIE_BROWSERS = ['chrome', 'chromium', 'firefox', 'safari', 'edge', 'brave', 'opera', 'vivaldi', 'whale'] as const;
@@ -119,6 +119,16 @@ export class VideosService implements OnModuleInit {
       this.reconcileTimer.unref?.();
       void this.scanBookmarkedChannelsOnStartup();
     }
+  }
+
+  async onModuleDestroy() {
+    this.syncEnabled = false;
+    if (this.reconcileTimer) { clearInterval(this.reconcileTimer); this.reconcileTimer = null; }
+    if (this.downloadPumpTimer) { clearTimeout(this.downloadPumpTimer); this.downloadPumpTimer = null; }
+    if (this.subtitlePumpTimer) { clearTimeout(this.subtitlePumpTimer); this.subtitlePumpTimer = null; }
+    for (const id of this.active.keys()) this.storage.setJobPending('video', id);
+    for (const id of this.activeSubtitleDownloads) this.storage.setJobPending('subtitle', id);
+    await Promise.allSettled([this.queueWrite, this.subtitleQueueWrite, this.failureLogWrite]);
   }
 
   private async scanBookmarkedChannelsOnStartup() {
@@ -470,6 +480,26 @@ export class VideosService implements OnModuleInit {
   private get downloadDir() {
     if (!this.configuredDir) throw new ConflictException('Configureer eerst een opslagmap');
     return this.configuredDir;
+  }
+
+  private hasSufficientDiskSpace(): boolean {
+    if (!this.configuredDir) return true;
+    try { const s = statfsSync(this.configuredDir); return s.bavail * s.bsize > 512 * 1024 * 1024; }
+    catch { return true; }
+  }
+
+  private fsAccessible(dir: string): boolean {
+    try { statfsSync(dir); return true; } catch { return false; }
+  }
+
+  getHealth() {
+    const configOk = this.fsAccessible(this.dataDir);
+    const downloadOk = this.configuredDir ? this.fsAccessible(this.configuredDir) : null;
+    const dbOk = this.storage.isAlive();
+    if (!configOk || !dbOk || downloadOk === false) {
+      throw new ServiceUnavailableException({ status: 'degraded', checks: { config: configOk, downloads: downloadOk, database: dbOk } });
+    }
+    return { status: 'ok', checks: { config: configOk, downloads: downloadOk, database: dbOk } };
   }
 
   private async persist(path: string, data: unknown) {
@@ -931,6 +961,11 @@ export class VideosService implements OnModuleInit {
     if (this.downloadNextRunAt) {
       this.downloadNextRunAt = 0;
       void this.persist(this.rateLimitPath, { retryAt: 0 });
+    }
+    if (!this.hasSufficientDiskSpace()) {
+      console.warn('Onvoldoende vrije schijfruimte om te downloaden; opnieuw controleren over 1 minuut.');
+      this.scheduleDownloadPump(60_000);
+      return;
     }
     while (this.syncEnabled && this.active.size < this.maxParallelDownloads && this.queue.length) {
       const nextIndex = this.queue.findIndex((id) => !this.active.has(id)

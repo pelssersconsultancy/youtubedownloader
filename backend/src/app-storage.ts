@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseSync } from 'node:sqlite';
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, statfsSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, statfsSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -15,6 +15,9 @@ export class AppStorage {
 
   constructor() {
     mkdirSync(this.dataDir, { recursive: true });
+    const probe = join(this.dataDir, '.write-probe');
+    try { writeFileSync(probe, ''); unlinkSync(probe); }
+    catch (error) { throw new Error(`Config directory ${this.dataDir} is not writable — check that the volume is mounted with write access: ${String(error)}`); }
     this.database = new DatabaseSync(this.databasePath);
     this.database.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     this.runMigrations();
@@ -368,6 +371,10 @@ export class AppStorage {
       this.database.prepare('INSERT INTO error_events(created_at,message) VALUES(?,?)').run(new Date().toISOString(), entry.trim());
       this.database.exec('COMMIT');
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
+  }
+
+  isAlive(): boolean {
+    try { this.database.prepare('SELECT 1').get(); return true; } catch { return false; }
   }
 
   recoverJobs(kind: 'video' | 'subtitle'): string[] {

@@ -16,6 +16,7 @@ function loadLocalEnv() {
 async function bootstrap() {
   loadLocalEnv();
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
   app.enableCors({ origin: 'http://localhost:4200' });
   await app.listen(3000);
   console.log('API draait op http://localhost:3000/api');

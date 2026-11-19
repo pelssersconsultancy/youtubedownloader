@@ -43,11 +43,13 @@ Follow-up work: return a compact state snapshot or changes since a cursor; consi
 
 `listChannel` now processes yt-dlp JSON lines incrementally using the runner's `onLine` streaming mode instead of accumulating all stdout in a string. Slim `VideoInfo` objects are collected as lines arrive (roughly 100× smaller than the raw yt-dlp JSON per video). Metadata is flushed to the database in batches of 50, so videos processed before an early exit are not lost. The full collected list is still returned to the caller after the stream ends.
 
-### 6. Validate storage and support graceful shutdown
+### 6. Validate storage and support graceful shutdown — implemented
 
-At startup, confirm that `/app-data/config` and `/app-data/downloads` are writable and report a clear health state if the mount is missing or read-only. Check available disk space before starting large downloads.
+`AppStorage` writes a probe file before opening the database; a read-only or missing mount now produces a clear error message instead of a cryptic SQLite failure. `VideosService` implements `OnModuleDestroy`: timers are stopped, active video and subtitle jobs are marked `pending` so they recover on the next start, and pending queue and log writes are awaited before the process exits. `main.ts` enables NestJS shutdown hooks so SIGTERM is handled cleanly. `YtdlpRunner.onModuleDestroy` already kills all active child processes.
 
-On shutdown, stop accepting new work, terminate child processes cleanly, persist active jobs as recoverable, and flush pending database writes. Add a Docker health check that verifies the API and storage are ready, rather than checking only that the container process exists. [Docker `HEALTHCHECK` documentation](https://docs.docker.com/reference/dockerfile/#healthcheck)
+The download pump checks for at least 512 MB of free space before starting each slot; if space is low it reschedules after one minute rather than starting a download that would likely fail mid-way.
+
+`GET /api/health` returns `{ status, checks: { config, downloads, database } }`. It uses `statfsSync` to confirm the config and download filesystems are reachable and a `SELECT 1` to confirm the database is responsive. The endpoint returns 503 when any check fails. Both Dockerfiles now include a `HEALTHCHECK` that calls this endpoint via Node's built-in `fetch` every 30 seconds.
 
 ### 7. Split the backend into focused services
 

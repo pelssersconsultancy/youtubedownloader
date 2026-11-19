@@ -105,6 +105,11 @@ export class VideosController {
     return this.videos.listChannel(url);
   }
 
+  @Get('health')
+  health() {
+    return this.videos.getHealth();
+  }
+
   /** Gedownloade ids, wachtrij, huidige voortgang en mislukte downloads. */
   @Get('state')
   state() {
