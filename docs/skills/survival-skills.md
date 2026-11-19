@@ -18,7 +18,7 @@ Prepared on November 18, 2026
 - Deep South Homestead ✓
 - Becky's Homestead ✓ (canning)
 - Townsends \* (18th-century preservation methods)
-- Note: some prepper channels can butter. This has not been proven safe; follow only tested recipes, such as those from the National Center for Home Food Preservation website.
+- Note: Some prepper channels recommend canning butter. The safety of this method has not been established; follow only tested recipes, such as those from the National Center for Home Food Preservation website.
 
 ### 1.2 Emergency supplies and long-term storage (rice, beans, grains, salt, water)
 

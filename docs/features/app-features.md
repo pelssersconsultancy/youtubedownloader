@@ -41,7 +41,7 @@ This file is the durable product requirements list for the downloader frontend a
 - Add a **Suggestions** page below **My Channels**, backed by `docs/skills/suggestions.json`, grouping verified YouTube channels under the main sections and subsections from the self-reliance skills guide. Each suggestion can be added to My Channels; adding it does not enable auto-sync.
 - Add a separate **Sync progress** navigation item below **Suggestions** and show sync progress grouped by channel on that page.
 - After adding a channel, keep the user on the My Channels page and show the new channel in the bookmark list.
-- Keep Sync progress off the Kanalen page itself.
+- Keep Sync progress off the Channels page itself.
 - Let the user click a bookmarked channel to open its video selection page, show the channel title at the top, and load its videos automatically without a URL field or load button.
 - Load bookmarked-channel details from a local per-channel cache in pages of 20 and virtualize the list; fetch further pages as the user scrolls so cached first results appear immediately.
 - Auto-sync is an explicit per-channel toggle, off by default. The add action only bookmarks the channel.
@@ -53,6 +53,6 @@ This file is the durable product requirements list for the downloader frontend a
 - Run each video synchronization in its own `yt-dlp` process.
 - Let the user configure the maximum number of parallel video sync processes in settings; default to 1.
 - Poll sync status every 2 seconds and show active video titles, thumbnails, and download progress, plus a preview of queued videos.
-- Show a Faal log link next to the Sync progress title; open the latest 1,000 failure-log lines in a closable scrollable dialog.
+- Show a failure log link next to the Sync progress title; open the latest 1,000 failure-log lines in a closable scrollable dialog.
 - Use yt-dlp browser cookies from the selected browser for metadata scans and downloads.
 - Provide Stop syncing / Start syncing controls; stopping terminates active download processes and retains their jobs in the persistent queue for resuming.

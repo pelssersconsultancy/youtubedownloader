@@ -1,33 +1,33 @@
 # YouTube Downloader
 
-## Gebruik met Docker Desktop
+## Use with Docker Desktop
 
-1. Installeer en start [Docker Desktop](https://www.docker.com/products/docker-desktop/).
-2. Klik rechtsonder op **Terminal**.
-3. Plak deze regel in het terminalvenster en druk op Enter:
+1. Install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+2. Click **Terminal** in the bottom-right corner.
+3. Paste this command into the terminal and press Enter:
 
    ```bash
    docker pull ghcr.io/pelssersconsultancy/youtubedownloader:latest
    ```
 
-   Je hebt hiervoor geen GitHub-account nodig. Wacht tot het downloaden klaar is en sluit het terminalvenster.
+   You do not need a GitHub account. Wait for the download to finish, then close the terminal.
 
-4. Open **Images → Local**, zoek op `youtubedownloader` en klik op **Run**. Open **Optional settings** en stel in:
-   - **Port:** host `8080` naar container `80`.
-   - **Volumes:** koppel één map op je computer aan containerpad `/app-data`.
-5. Klik op **Run** en open [http://localhost:8080](http://localhost:8080).
+4. Open **Images → Local**, search for `youtubedownloader`, and click **Run**. Open **Optional settings** and set:
+   - **Port:** host `8080` to container `80`.
+   - **Volumes:** map one folder on your computer to the container path `/app-data`.
+5. Click **Run**, then open [http://localhost:8080](http://localhost:8080).
 
-De applicatie maakt in die map automatisch `config/` en `downloads/` aan. Instellingen, kanalen en metadata komen in `config/`; video’s en ondertitels in `downloads/`. Je hoeft deze twee submappen dus niet zelf aan te maken.
+The app automatically creates `config/` and `downloads/` inside that folder. Settings, channels, and metadata go in `config/`; videos and subtitles go in `downloads/`. You do not need to create these two subfolders yourself.
 
-### Voorbeelden van Host path
+### Host path examples
 
-Koppel in Docker Desktop de volledige hoofdmap aan `/app-data`:
+In Docker Desktop, map the main folder on your computer to `/app-data`:
 
 - **macOS:** Host path `/Users/robbypelssers/Movies/youtubedownloader` → Container path `/app-data`
-- **Windows:** Host path `C:\Users\<jouw-naam>\Videos\youtubedownloader` → Container path `/app-data`
+- **Windows:** Host path `C:\Users\<your-username>\Videos\youtubedownloader` → Container path `/app-data`
 
-Vervang op Windows `<jouw-naam>` door je Windows-gebruikersnaam. Maak of selecteer alleen de hoofdmap; de app maakt `config` en `downloads` daarin zelf aan. Als je al de mappen `config` en `downloads` naast elkaar hebt, kies dan hun bovenliggende map als Host path. Gebruik bij een volgende container steeds dezelfde hoofdmap om je gegevens te behouden.
+Create or select only the main folder; the app will create `config` and `downloads` inside it. If you already have `config` and `downloads` folders next to each other, choose their parent folder as the Host path. Use the same main folder whenever you recreate the container to keep your data.
 
-## Image bijwerken
+## Update the image
 
-Voer de `docker pull`-regel hierboven opnieuw uit via **Terminal**. Stop en verwijder daarna de oude container en start de image opnieuw met dezelfde poort en mappen.
+Run the `docker pull` command above again using **Terminal**. Then stop and remove the old container, and start the updated image with the same port and folder mapping.
