@@ -39,9 +39,9 @@ A background timer reconciles the in-memory set with the actual download folder 
 
 Follow-up work: return a compact state snapshot or changes since a cursor; consider server-sent events if polling remains a bottleneck at larger collection sizes.
 
-### 5. Stream large channel scans
+### 5. Stream large channel scans — implemented
 
-Channel-list output is currently accumulated before it is parsed. Process yt-dlp JSON lines incrementally and save results in batches. This bounds memory use for channels with large histories and reduces the risk of oversized-string failures.
+`listChannel` now processes yt-dlp JSON lines incrementally using the runner's `onLine` streaming mode instead of accumulating all stdout in a string. Slim `VideoInfo` objects are collected as lines arrive (roughly 100× smaller than the raw yt-dlp JSON per video). Metadata is flushed to the database in batches of 50, so videos processed before an early exit are not lost. The full collected list is still returned to the caller after the stream ends.
 
 ### 6. Validate storage and support graceful shutdown
 

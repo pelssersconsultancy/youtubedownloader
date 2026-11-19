@@ -660,27 +660,43 @@ export class VideosService implements OnModuleInit {
     const hasTab = /\/(videos|streams|shorts)\/?$/.test(u.pathname);
     const target = isPlaylist || hasTab ? u.href : u.href.replace(/\/$/, '') + '/videos';
 
+    const collected: VideoInfo[] = [];
+    let batch: VideoInfo[] = [];
+    let hadOutput = false;
+    let saves = Promise.resolve<void>(undefined);
+    const flushBatch = () => {
+      if (!batch.length) return;
+      const ready = batch;
+      batch = [];
+      saves = saves.then(() => this.saveVideos(ready).catch(() => undefined));
+    };
+
     const { result } = this.runner.run([
       '--skip-download', '--flat-playlist', '--dump-json', '--no-warnings',
       '--sleep-requests', '2',
       ...this.cookieArgs,
       target,
-    ]);
-    const { ok, stdout, stderr } = await result;
-    if (!ok && !stdout) throw new BadRequestException(stderr.trim() || 'yt-dlp is mislukt');
-    const videos: VideoInfo[] = stdout
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => JSON.parse(line))
-      .filter((j) => ID_RE.test(j.id) && !this.isMembersOnly(j))
-      .map((j) => this.toVideoInfo(j));
-    try {
-      await this.saveVideos(videos);
-      void this.enrichChannelMetadata(target);
-      return videos;
-    } catch (error) {
-      throw new BadRequestException(`Metadata opslaan is mislukt: ${String(error)}`);
-    }
+    ], {
+      onLine: (line) => {
+        if (!line.trim()) return;
+        try {
+          const j = JSON.parse(line);
+          if (!ID_RE.test(j.id) || this.isMembersOnly(j)) return;
+          hadOutput = true;
+          const video = this.toVideoInfo(j);
+          collected.push(video);
+          batch.push(video);
+          if (batch.length >= 50) flushBatch();
+        } catch { /* Ignore malformed lines and continue. */ }
+      },
+    });
+
+    const { ok, stderr } = await result;
+    if (!ok && !hadOutput) throw new BadRequestException(stderr.trim() || 'yt-dlp is mislukt');
+    flushBatch();
+    await saves;
+    void this.enrichChannelMetadata(target);
+    return collected;
   }
 
   private async scanDownloadDir(): Promise<string[]> {
