@@ -44,6 +44,18 @@ export class AppStorage {
           CREATE TABLE error_events (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, message TEXT NOT NULL);
           CREATE INDEX error_events_created_at ON error_events(created_at);`,
       },
+      {
+        version: 2,
+        name: 'durable-retryable-download-jobs',
+        sql: `ALTER TABLE jobs ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE jobs ADD COLUMN created_at TEXT NOT NULL DEFAULT '';
+          ALTER TABLE jobs ADD COLUMN next_attempt_at INTEGER;
+          ALTER TABLE jobs ADD COLUMN last_error TEXT;
+          ALTER TABLE jobs ADD COLUMN error_class TEXT;
+          ALTER TABLE jobs ADD COLUMN progress INTEGER NOT NULL DEFAULT 0;
+          UPDATE jobs SET created_at = updated_at WHERE created_at = '';
+          CREATE INDEX jobs_ready ON jobs(kind, status, next_attempt_at);`,
+      },
     ];
     const applied = this.database.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations').get() as { version: number };
     const latest = migrations.at(-1)!.version;
@@ -212,7 +224,12 @@ export class AppStorage {
       const cache = cacheFiles.get(`channel-cache/${digest}.json`);
       if (!cache) continue;
       const videos = JSON.parse(readFileSync(cache.path, 'utf8')) as Array<{ id: string }>;
-      videos.forEach((video, position) => insert.run(channel.url, video.id, position, JSON.stringify(video)));
+      const seen = new Set<string>();
+      videos.forEach((video, position) => {
+        if (!/^[A-Za-z0-9_-]{11}$/.test(video.id) || seen.has(video.id)) return;
+        seen.add(video.id);
+        insert.run(channel.url, video.id, position, JSON.stringify(video));
+      });
     }
   }
 
@@ -228,7 +245,7 @@ export class AppStorage {
       if (!queueFile) continue;
       const ids = JSON.parse(readFileSync(queueFile.path, 'utf8')) as string[];
       const insert = this.database.prepare('INSERT INTO jobs(id,kind,status,updated_at) VALUES(?,?,?,?)');
-      ids.forEach((id) => insert.run(id, kind, 'pending', new Date().toISOString()));
+      [...new Set(ids.filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id)))].forEach((id) => insert.run(id, kind, 'pending', new Date().toISOString()));
     }
   }
 
@@ -262,17 +279,22 @@ export class AppStorage {
           this.database.prepare('DELETE FROM channel_videos WHERE channel_url = ?').run(channel.url);
           const videos = JSON.parse(content) as Array<{ id: string }>;
           const insert = this.database.prepare('INSERT INTO channel_videos(channel_url,video_id,position,metadata) VALUES(?,?,?,?)');
-          videos.forEach((video, position) => insert.run(channel.url, video.id, position, JSON.stringify(video)));
+          const seen = new Set<string>();
+          videos.forEach((video, position) => {
+            if (!/^[A-Za-z0-9_-]{11}$/.test(video.id) || seen.has(video.id)) return;
+            seen.add(video.id);
+            insert.run(channel.url, video.id, position, JSON.stringify(video));
+          });
         }
       } else if (key === 'sync-queue.json' || key === 'subtitle-queue.json' || key === 'rate-limit.json') {
         this.database.prepare(`INSERT INTO job_state(name,content,updated_at) VALUES(?,?,?)
           ON CONFLICT(name) DO UPDATE SET content=excluded.content,updated_at=excluded.updated_at`).run(key, content, now);
         if (key.endsWith('-queue.json')) {
           const kind = key === 'sync-queue.json' ? 'video' : 'subtitle';
-          this.database.prepare('DELETE FROM jobs WHERE kind = ?').run(kind);
           const jobs = JSON.parse(content) as string[];
-          const insert = this.database.prepare('INSERT INTO jobs(id,kind,status,updated_at) VALUES(?,?,?,?)');
-          jobs.forEach((id) => insert.run(id, kind, 'pending', now));
+          const insert = this.database.prepare(`INSERT INTO jobs(id,kind,status,updated_at,created_at) VALUES(?,?,'pending',?,?)
+            ON CONFLICT(kind,id) DO NOTHING`);
+          jobs.forEach((id) => insert.run(id, kind, now, now));
         }
       } else if (key === 'settings.json') {
         this.database.exec('DELETE FROM app_settings;');
@@ -293,7 +315,12 @@ export class AppStorage {
       const digest = createHash('sha256').update(channel.url).digest('hex');
       const json = byPath.get(`channel-cache/${digest}.json`);
       if (!json) continue;
-      (JSON.parse(json) as Array<{ id: string }>).forEach((video, position) => insert.run(channel.url, video.id, position, JSON.stringify(video)));
+      const seen = new Set<string>();
+      (JSON.parse(json) as Array<{ id: string }>).forEach((video, position) => {
+        if (!/^[A-Za-z0-9_-]{11}$/.test(video.id) || seen.has(video.id)) return;
+        seen.add(video.id);
+        insert.run(channel.url, video.id, position, JSON.stringify(video));
+      });
     }
   }
 
@@ -322,5 +349,80 @@ export class AppStorage {
       this.database.prepare('INSERT INTO error_events(created_at,message) VALUES(?,?)').run(new Date().toISOString(), entry.trim());
       this.database.exec('COMMIT');
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
+  }
+
+  recoverJobs(kind: 'video' | 'subtitle'): string[] {
+    this.database.prepare(`UPDATE jobs SET status='pending',updated_at=?,next_attempt_at=NULL
+        ,progress=0 WHERE kind=? AND status='running'`).run(new Date().toISOString(), kind);
+    return (this.database.prepare("SELECT id FROM jobs WHERE kind=? AND status IN ('pending','retry_wait') ORDER BY created_at,id")
+      .all(kind) as Array<{ id: string }>).map((row) => row.id);
+  }
+
+  retryTimes(kind: 'video' | 'subtitle') {
+    return this.database.prepare("SELECT id,next_attempt_at FROM jobs WHERE kind=? AND status='retry_wait' AND next_attempt_at IS NOT NULL")
+      .all(kind) as Array<{ id: string; next_attempt_at: number }>;
+  }
+
+  ensureJob(kind: 'video' | 'subtitle', id: string) {
+    const now = new Date().toISOString();
+    this.database.prepare(`INSERT INTO jobs(id,kind,status,updated_at,created_at) VALUES(?,?,'pending',?,?)
+      ON CONFLICT(kind,id) DO NOTHING`).run(id, kind, now, now);
+  }
+
+  setJobPending(kind: 'video' | 'subtitle', id: string) {
+    const now = new Date().toISOString();
+    this.database.prepare(`UPDATE jobs SET status='pending',updated_at=?,next_attempt_at=NULL,last_error=NULL,error_class=NULL,progress=0 WHERE kind=? AND id=?`)
+      .run(now, kind, id);
+  }
+
+  jobNextAttemptAt(kind: 'video' | 'subtitle', id: string): number | null {
+    const row = this.database.prepare('SELECT next_attempt_at FROM jobs WHERE kind=? AND id=?').get(kind, id) as { next_attempt_at: number | null } | undefined;
+    return row?.next_attempt_at ?? null;
+  }
+
+  jobAttemptCount(kind: 'video' | 'subtitle', id: string): number {
+    const row = this.database.prepare('SELECT attempt_count FROM jobs WHERE kind=? AND id=?').get(kind, id) as { attempt_count: number } | undefined;
+    return row?.attempt_count ?? 0;
+  }
+
+  resetJob(kind: 'video' | 'subtitle', id: string) {
+    const now = new Date().toISOString();
+    this.database.prepare(`INSERT INTO jobs(id,kind,status,updated_at,created_at) VALUES(?,?,'pending',?,?)
+      ON CONFLICT(kind,id) DO UPDATE SET status='pending',updated_at=excluded.updated_at,attempt_count=0,
+        next_attempt_at=NULL,last_error=NULL,error_class=NULL,progress=0`).run(id, kind, now, now);
+  }
+
+  startJob(kind: 'video' | 'subtitle', id: string) {
+    this.database.prepare(`UPDATE jobs SET status='running',attempt_count=attempt_count+1,updated_at=?,next_attempt_at=NULL,progress=0
+      WHERE kind=? AND id=?`).run(new Date().toISOString(), kind, id);
+  }
+
+  updateJobProgress(id: string, progress: number) {
+    this.database.prepare("UPDATE jobs SET progress=?,updated_at=? WHERE kind='video' AND id=? AND status='running'")
+      .run(progress, new Date().toISOString(), id);
+  }
+
+  completeJob(kind: 'video' | 'subtitle', id: string) {
+    this.database.prepare(`UPDATE jobs SET status='completed',progress=100,updated_at=?,next_attempt_at=NULL,last_error=NULL,error_class=NULL
+      WHERE kind=? AND id=?`).run(new Date().toISOString(), kind, id);
+  }
+
+  failJob(kind: 'video' | 'subtitle', id: string, status: 'failed' | 'skipped', error: string, errorClass: string) {
+    this.database.prepare('UPDATE jobs SET status=?,updated_at=?,next_attempt_at=NULL,last_error=?,error_class=? WHERE kind=? AND id=?')
+      .run(status, new Date().toISOString(), error.slice(-8000), errorClass, kind, id);
+  }
+
+  retryJob(kind: 'video' | 'subtitle', id: string, nextAttemptAt: number, error: string, errorClass: string) {
+    this.database.prepare(`UPDATE jobs SET status='retry_wait',updated_at=?,next_attempt_at=?,last_error=?,error_class=?,progress=0
+      WHERE kind=? AND id=?`).run(new Date().toISOString(), nextAttemptAt, error.slice(-8000), errorClass, kind, id);
+  }
+
+  jobsByStatus(kind: 'video' | 'subtitle', statuses: string[]) {
+    const marks = statuses.map(() => '?').join(',');
+    return this.database.prepare(`SELECT id,status,attempt_count,created_at,updated_at,next_attempt_at,last_error,error_class,progress
+      FROM jobs WHERE kind=? AND status IN (${marks}) ORDER BY created_at DESC`).all(kind, ...statuses) as Array<{
+        id: string; status: string; attempt_count: number; created_at: string; updated_at: string;
+        next_attempt_at: number | null; last_error: string | null; error_class: string | null; progress: number;
+      }>;
   }
 }

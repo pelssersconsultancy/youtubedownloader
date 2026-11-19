@@ -113,7 +113,7 @@ export class VideosController {
 
   @Post('download')
   download(@Body() body: { ids: string[] }) {
-    return this.videos.enqueue(body?.ids ?? []);
+    return this.videos.enqueue(body?.ids ?? [], true);
   }
 }
 

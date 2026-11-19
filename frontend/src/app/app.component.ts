@@ -69,6 +69,8 @@ interface State {
   syncEnabled: boolean;
   retryAt?: number | null;
   failed: string[];
+  retrying?: Array<{ id: string; attempt: number; nextAttemptAt: number | null; errorClass: string | null }>;
+  subtitleRetrying?: Array<{ id: string; attempt: number; nextAttemptAt: number | null; errorClass: string | null }>;
 }
 
 const API = '/api';
@@ -514,6 +516,12 @@ const API = '/api';
                 }}{{ retryMinutes() }} {{ t('min.', 'min. opnieuw geprobeerd.') }}
               </p>
             }
+            @if (state().subtitleRetrying?.length) {
+              <p class="count">
+                {{ state().subtitleRetrying?.length ?? 0 }}
+                {{ t('subtitle jobs waiting for retry.', 'ondertiteljobs wachten op een nieuwe poging.') }}
+              </p>
+            }
             @for (channel of syncProgress(); track channel.url) {
               <article class="channel-progress-card">
                 <div class="channel-progress-heading">
@@ -565,9 +573,7 @@ const API = '/api';
                         height="68"
                       />
                       <div class="sync-info">
-                        <strong>{{ video.title }}</strong><span>{{
-                          t('Queued', 'In wachtrij')
-                        }}</span>
+                        <strong>{{ video.title }}</strong><span>{{ queuedStatus(video.id) }}</span>
                       </div>
                     </article>
                   }
@@ -2888,9 +2894,17 @@ export class AppComponent {
     const active =
       s.active?.find((item) => item.id === id) ?? (s.current?.id === id ? s.current : null);
     if (active) return `${active.progress}%`;
-    if (s.queued.includes(id)) return this.t('Queued', 'In wachtrij');
+    if (s.queued.includes(id)) return this.queuedStatus(id);
     if (s.failed.includes(id)) return this.t('Failed', 'Mislukt');
     return '';
+  }
+
+  queuedStatus(id: string) {
+    const retry = this.state().retrying?.find((job) => job.id === id);
+    if (!retry) return this.t('Queued', 'In wachtrij');
+    const remaining = Math.max(0, (retry.nextAttemptAt ?? Date.now()) - Date.now());
+    const time = remaining >= 60_000 ? `${Math.ceil(remaining / 60_000)} min` : `${Math.ceil(remaining / 1000)} sec`;
+    return `${this.t('Retry in', 'Opnieuw over')} ${time}`;
   }
 
   badgeClass(id: string) {

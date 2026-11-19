@@ -28,6 +28,7 @@ export interface ChannelSuggestionSection { title: string; subsections: ChannelS
 
 @Injectable()
 export class VideosService implements OnModuleInit {
+  private static readonly MAX_JOB_ATTEMPTS = 5;
   private static readonly COOKIE_BROWSERS = ['chrome', 'chromium', 'firefox', 'safari', 'edge', 'brave', 'opera', 'vivaldi', 'whale'] as const;
   private readonly dataDir = process.env.APP_DATA_DIR
     ? resolve(process.env.APP_DATA_DIR)
@@ -59,6 +60,8 @@ export class VideosService implements OnModuleInit {
   private downloadNextRunAt = 0;
   private downloadPumpTimer: ReturnType<typeof setTimeout> | null = null;
   private rateLimitedDownloads = new Set<string>();
+  private downloadErrors = new Map<string, string>();
+  private persistedProgress = new Map<string, number>();
   private downloadProcesses = new Map<string, ChildProcess>();
   private maxParallelDownloads = 1;
   private syncEnabled = true;
@@ -82,16 +85,24 @@ export class VideosService implements OnModuleInit {
     await this.getSettings();
     try {
       const savedQueue = this.storage.readJson<string[]>(this.queuePath);
-      const downloaded = new Set(await this.downloadedIds());
-      this.queue = [...new Set(savedQueue.filter((id) => ID_RE.test(id) && !downloaded.has(id)))];
-      await this.saveQueue();
+      for (const id of savedQueue.filter((item) => ID_RE.test(item))) this.storage.ensureJob('video', id);
     } catch { /* No pending sync work yet. */ }
+    const downloaded = new Set(await this.downloadedIds());
+    const recoveredVideos = this.storage.recoverJobs('video');
+    for (const id of downloaded) this.storage.completeJob('video', id);
+    this.queue = [...new Set(recoveredVideos.filter((id) => !downloaded.has(id)))];
+    await this.saveQueue();
     try {
       const savedSubtitleQueue = this.storage.readJson<string[]>(this.subtitleQueuePath);
-      const downloaded = new Set(await this.downloadedIds());
-      this.subtitleQueue = [...new Set(savedSubtitleQueue.filter((id) => ID_RE.test(id) && downloaded.has(id)))];
-      await this.saveSubtitleQueue();
+      for (const id of savedSubtitleQueue.filter((item) => ID_RE.test(item))) this.storage.ensureJob('subtitle', id);
     } catch { /* Subtitle work is queued after a video has completed. */ }
+    const recoveredSubtitles = this.storage.recoverJobs('subtitle');
+    this.subtitleQueue = [...new Set(recoveredSubtitles.filter((id) => downloaded.has(id)))];
+    for (const id of recoveredSubtitles.filter((queuedId) => !downloaded.has(queuedId))) {
+      this.storage.failJob('subtitle', id, 'skipped', 'The source video is no longer present in the downloads folder.', 'source_missing');
+    }
+    await this.saveSubtitleQueue();
+    this.failed = new Set(this.storage.jobsByStatus('video', ['failed', 'skipped']).map((job) => job.id));
     try {
       const savedRetryAt = this.storage.readJson<{ retryAt?: number }>(this.rateLimitPath);
       if (typeof savedRetryAt.retryAt === 'number' && savedRetryAt.retryAt > Date.now()) {
@@ -438,6 +449,36 @@ export class VideosService implements OnModuleInit {
     return finalPart ? decodeURIComponent(finalPart) : url.hostname;
   }
 
+  private classifyJobError(error: string) {
+    if (/HTTP Error 429|Too Many Requests|rate-limited by YouTube|rate limit/i.test(error)) {
+      return { retryable: true, permanent: false, errorClass: 'rate_limited' };
+    }
+    if (/members.only|subscriber.only|private video|has been removed|video has been removed|this video is not available|video unavailable|no longer available|not available in your country|account has been terminated|channel has been terminated/i.test(error)) {
+      return { retryable: false, permanent: true, errorClass: 'access_unavailable' };
+    }
+    if (/HTTP Error 403|Forbidden/i.test(error)) {
+      return { retryable: true, permanent: false, errorClass: 'access_denied_temporary' };
+    }
+    if (/timed? ?out|timeout|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network|connection (?:reset|closed|refused)|HTTP Error 5\d\d|temporarily unavailable|TLS/i.test(error)) {
+      return { retryable: true, permanent: false, errorClass: 'transient_network' };
+    }
+    return { retryable: false, permanent: false, errorClass: 'non_retryable' };
+  }
+
+  private retryDelay(errorClass: string, attempts: number) {
+    const base = errorClass === 'rate_limited' ? 60 * 60_000 : 30_000;
+    const cap = errorClass === 'rate_limited' ? 6 * 60 * 60_000 : 30 * 60_000;
+    return Math.round(Math.min(cap, base * 2 ** Math.max(0, attempts - 1)) * (0.8 + Math.random() * 0.4));
+  }
+
+  private formatDelay(delayMs: number) {
+    if (delayMs < 60_000) return `${Math.ceil(delayMs / 1000)} seconden`;
+    if (delayMs < 60 * 60_000) return `${Math.ceil(delayMs / 60_000)} minuten`;
+    const hours = Math.floor(delayMs / (60 * 60_000));
+    const minutes = Math.ceil((delayMs % (60 * 60_000)) / 60_000);
+    return minutes ? `${hours} uur en ${minutes} minuten` : `${hours} uur`;
+  }
+
   private get downloadDir() {
     if (!this.configuredDir) throw new ConflictException('Configureer eerst een opslagmap');
     return this.configuredDir;
@@ -705,6 +746,8 @@ export class VideosService implements OnModuleInit {
 
   private async ensureDownloadedSubtitles(id: string) {
     if (this.subtitleAttempts.has(id) || (this.subtitleQueue.includes(id) && Date.now() < this.subtitleNextRunAt)) return;
+    const retryAt = this.storage.jobNextAttemptAt('subtitle', id);
+    if (retryAt && retryAt > Date.now() && this.subtitleQueue.includes(id)) return;
     let task = this.subtitleDownloads.get(id);
     if (!task) {
       let resolve!: () => void;
@@ -712,6 +755,7 @@ export class VideosService implements OnModuleInit {
       task = { promise, resolve };
       this.subtitleDownloads.set(id, task);
       if (!this.subtitleQueue.includes(id) && !this.activeSubtitleDownloads.has(id)) {
+        this.storage.ensureJob('subtitle', id);
         this.subtitleQueue.push(id);
         try { await this.saveSubtitleQueue(); }
         catch (error) {
@@ -733,27 +777,50 @@ export class VideosService implements OnModuleInit {
       this.scheduleSubtitlePump(waitMs);
       return;
     }
-    const id = this.subtitleQueue.find((queuedId) => !this.activeSubtitleDownloads.has(queuedId));
-    if (!id) return;
+    const eligible = this.subtitleQueue.find((queuedId) => !this.activeSubtitleDownloads.has(queuedId)
+      && (this.storage.jobNextAttemptAt('subtitle', queuedId) ?? 0) <= Date.now());
+    if (!eligible) {
+      const next = this.subtitleQueue.map((queuedId) => this.storage.jobNextAttemptAt('subtitle', queuedId) ?? 0)
+        .filter((time) => time > Date.now()).sort((a, b) => a - b)[0];
+      if (next) this.scheduleSubtitlePump(Math.max(250, next - Date.now()));
+      return;
+    }
+    const id = eligible;
+    this.storage.startJob('subtitle', id);
     this.activeSubtitleDownloads.add(id);
     void this.downloadSubtitles(id).then(async (result) => {
       this.activeSubtitleDownloads.delete(id);
-      if (result.rateLimited) {
-        const attempts = (this.subtitleRateLimitAttempts.get(id) ?? 0) + 1;
-        this.subtitleRateLimitAttempts.set(id, attempts);
-        const delayMs = Math.min(30 * 60_000, 60_000 * 2 ** Math.min(attempts - 1, 5));
-        this.subtitleNextRunAt = Date.now() + delayMs;
-        console.warn(`Ondertitels ophalen voor ${id} is door YouTube beperkt (HTTP 429); opnieuw proberen over ${Math.ceil(delayMs / 60_000)} min.`);
+      if (!result.success) {
+        const failure = result.error ?? 'Subtitle download failed without diagnostic output';
+        const classification = this.classifyJobError(failure);
+        const attempts = this.storage.jobAttemptCount('subtitle', id);
+        if (classification.retryable && attempts < VideosService.MAX_JOB_ATTEMPTS) {
+          const delayMs = this.retryDelay(classification.errorClass, attempts);
+          this.subtitleNextRunAt = Date.now() + 2_000;
+          const nextAttemptAt = Date.now() + delayMs;
+          this.storage.retryJob('subtitle', id, nextAttemptAt, failure, classification.errorClass);
+          console.warn(`Ondertitels ophalen voor ${id} is tijdelijk mislukt; poging ${attempts + 1}/${VideosService.MAX_JOB_ATTEMPTS} over ${this.formatDelay(delayMs)}.`);
+          this.subtitleDownloads.get(id)?.resolve();
+          this.subtitleDownloads.delete(id);
+          await this.saveSubtitleQueue().catch((error) => console.error(`Ondertitelwachtrij opslaan mislukt: ${String(error)}`));
+          this.scheduleSubtitlePump(2_000);
+          return;
+        }
+        const status = classification.permanent ? 'skipped' : 'failed';
+        this.storage.failJob('subtitle', id, status, failure, classification.errorClass);
+        this.subtitleQueue = this.subtitleQueue.filter((queuedId) => queuedId !== id);
+        this.subtitleAttempts.add(id);
+        console.error(`Ondertiteljob ${id} ${status === 'skipped' ? 'overgeslagen' : 'mislukt'}: ${failure}`);
         this.subtitleDownloads.get(id)?.resolve();
         this.subtitleDownloads.delete(id);
         await this.saveSubtitleQueue().catch((error) => console.error(`Ondertitelwachtrij opslaan mislukt: ${String(error)}`));
-        this.scheduleSubtitlePump(delayMs);
+        this.scheduleSubtitlePump(2_000);
         return;
       }
       this.subtitleQueue = this.subtitleQueue.filter((queuedId) => queuedId !== id);
+      this.storage.completeJob('subtitle', id);
       this.subtitleAttempts.add(id);
       this.subtitleRateLimitAttempts.delete(id);
-      if (!result.success && result.error) console.error(`Ondertitels ophalen mislukt voor ${id}: ${result.error}`);
       this.subtitleDownloads.get(id)?.resolve();
       this.subtitleDownloads.delete(id);
       this.subtitleNextRunAt = Date.now() + 2_000;
@@ -762,6 +829,7 @@ export class VideosService implements OnModuleInit {
     }).catch(async (error) => {
       this.activeSubtitleDownloads.delete(id);
       this.subtitleQueue = this.subtitleQueue.filter((queuedId) => queuedId !== id);
+      this.storage.failJob('subtitle', id, 'failed', String(error), 'process_error');
       this.subtitleAttempts.add(id);
       this.subtitleDownloads.get(id)?.resolve();
       this.subtitleDownloads.delete(id);
@@ -858,6 +926,18 @@ export class VideosService implements OnModuleInit {
       downloaded: await this.downloadedIds(),
       queued: [...this.queue],
       queuedItems,
+      retrying: this.storage.jobsByStatus('video', ['retry_wait']).map((job) => ({
+        id: job.id,
+        attempt: job.attempt_count,
+        nextAttemptAt: job.next_attempt_at,
+        errorClass: job.error_class,
+      })),
+      subtitleRetrying: this.storage.jobsByStatus('subtitle', ['retry_wait']).map((job) => ({
+        id: job.id,
+        attempt: job.attempt_count,
+        nextAttemptAt: job.next_attempt_at,
+        errorClass: job.error_class,
+      })),
       current: active[0] ?? null,
       active,
       syncEnabled: this.syncEnabled,
@@ -866,14 +946,16 @@ export class VideosService implements OnModuleInit {
     };
   }
 
-  async enqueue(ids: string[]) {
+  async enqueue(ids: string[], allowFailedRetry = false) {
     const done = new Set(await this.downloadedIds());
     for (const id of ids) {
       if (!ID_RE.test(id))
         throw new BadRequestException(`Ongeldig video-id: ${id}`);
       if (done.has(id) || this.queue.includes(id) || this.active.has(id))
         continue;
+      if (this.failed.has(id) && !allowFailedRetry) continue;
       this.failed.delete(id);
+      this.storage.resetJob('video', id);
       this.queue.push(id);
     }
     await this.prioritizeQueue();
@@ -893,35 +975,74 @@ export class VideosService implements OnModuleInit {
       void this.persist(this.rateLimitPath, { retryAt: 0 });
     }
     while (this.syncEnabled && this.active.size < this.maxParallelDownloads && this.queue.length) {
-      const nextIndex = this.queue.findIndex((id) => !this.active.has(id));
-      if (nextIndex < 0) break;
+      const nextIndex = this.queue.findIndex((id) => !this.active.has(id)
+        && (this.storage.jobNextAttemptAt('video', id) ?? 0) <= Date.now());
+      if (nextIndex < 0) {
+        const next = this.queue.map((id) => this.storage.jobNextAttemptAt('video', id) ?? 0)
+          .filter((time) => time > Date.now()).sort((a, b) => a - b)[0];
+        if (next) this.scheduleDownloadPump(Math.max(250, next - Date.now()));
+        break;
+      }
       const id = this.queue.splice(nextIndex, 1)[0];
       this.active.set(id, { progress: 0 });
+      this.storage.startJob('video', id);
+      this.persistedProgress.delete(id);
       void this.saveQueue().catch(() => undefined);
       void this.run(id).catch(async (error) => {
         try { await this.recordFailure(id, String(error)); } catch { /* Keep the queue moving. */ }
         return false;
       }).then(async (ok) => {
         if (ok) {
+          this.storage.completeJob('video', id);
+          this.downloadErrors.delete(id);
           void this.ensureDownloadedSubtitles(id).catch((error) => {
             console.error(`Ondertiteljob in wachtrij zetten mislukt voor ${id}: ${String(error)}`);
           });
         }
-        if (!ok && this.rateLimitedDownloads.has(id)) {
+        if (!ok && this.rateLimitedDownloads.has(id) && !this.pausedIds.has(id)) {
           this.rateLimitedDownloads.delete(id);
-          this.pausedIds.delete(id);
-          if (!this.queue.includes(id)) this.queue.unshift(id);
-          this.downloadNextRunAt = Date.now() + 60 * 60_000;
-          console.warn(`YouTube heeft de downloadsnelheid beperkt. Video ${id} blijft in de wachtrij; opnieuw proberen over ongeveer 1 uur.`);
-          await this.persist(this.rateLimitPath, { retryAt: this.downloadNextRunAt }).catch((error) => console.error(`Rate-limit wachttijd opslaan mislukt: ${String(error)}`));
+          const attempts = this.storage.jobAttemptCount('video', id);
+          const error = this.downloadErrors.get(id) ?? 'YouTube rate limit';
+          if (attempts < VideosService.MAX_JOB_ATTEMPTS) {
+            const delayMs = this.retryDelay('rate_limited', attempts);
+            this.downloadNextRunAt = Date.now() + delayMs;
+            this.storage.retryJob('video', id, this.downloadNextRunAt, error, 'rate_limited');
+            if (!this.queue.includes(id)) this.queue.unshift(id);
+            console.warn(`YouTube heeft de downloadsnelheid beperkt. Video ${id} blijft in de wachtrij; opnieuw proberen over ${this.formatDelay(delayMs)}.`);
+            await this.persist(this.rateLimitPath, { retryAt: this.downloadNextRunAt }).catch((saveError) => console.error(`Rate-limit wachttijd opslaan mislukt: ${String(saveError)}`));
+          } else {
+            this.storage.failJob('video', id, 'failed', error, 'rate_limited');
+            this.failed.add(id);
+          }
+          this.downloadErrors.delete(id);
         } else if (this.pausedIds.has(id)) {
           this.pausedIds.delete(id);
-          if (ok) this.queue = this.queue.filter((queuedId) => queuedId !== id);
-          else await this.downloadedIds().then((done) => {
-            if (done.includes(id)) this.queue = this.queue.filter((queuedId) => queuedId !== id);
-          }).catch(() => undefined);
+          if (ok) {
+            this.storage.completeJob('video', id);
+            this.queue = this.queue.filter((queuedId) => queuedId !== id);
+          } else {
+            this.rateLimitedDownloads.delete(id);
+            this.storage.setJobPending('video', id);
+            if (!this.queue.includes(id)) this.queue.unshift(id);
+            await this.downloadedIds().then((done) => {
+              if (done.includes(id)) this.queue = this.queue.filter((queuedId) => queuedId !== id);
+              if (done.includes(id)) this.storage.completeJob('video', id);
+            }).catch(() => undefined);
+          }
         } else if (!ok) {
-          this.failed.add(id);
+          const error = this.downloadErrors.get(id) ?? 'Download failed without diagnostic output';
+          const classification = this.classifyJobError(error);
+          const attempts = this.storage.jobAttemptCount('video', id);
+          if (classification.retryable && attempts < VideosService.MAX_JOB_ATTEMPTS) {
+            const delayMs = this.retryDelay(classification.errorClass, attempts);
+            this.storage.retryJob('video', id, Date.now() + delayMs, error, classification.errorClass);
+            this.queue.push(id);
+            console.warn(`Download van ${id} wordt opnieuw geprobeerd (${attempts + 1}/${VideosService.MAX_JOB_ATTEMPTS}) over ${this.formatDelay(delayMs)}.`);
+          } else {
+            this.storage.failJob('video', id, classification.permanent ? 'skipped' : 'failed', error, classification.errorClass);
+            this.failed.add(id);
+          }
+          this.downloadErrors.delete(id);
         }
         this.active.delete(id);
         void this.saveQueue().catch(() => undefined).finally(() => {
@@ -972,8 +1093,14 @@ export class VideosService implements OnModuleInit {
       this.downloadProcesses.set(id, p);
       p.stdout.on('data', (d) => {
         const m = /(\d+(?:\.\d+)?)%/.exec(String(d));
-        if (m && this.active.has(id))
-          this.active.get(id)!.progress = Math.round(parseFloat(m[1]));
+        if (m && this.active.has(id)) {
+          const progress = Math.round(parseFloat(m[1]));
+          this.active.get(id)!.progress = progress;
+          if (progress === 100 || Math.abs(progress - (this.persistedProgress.get(id) ?? -5)) >= 5) {
+            this.persistedProgress.set(id, progress);
+            this.storage.updateJobProgress(id, progress);
+          }
+        }
       });
       p.stderr.on('data', (d) => {
         stderr += String(d);
@@ -986,6 +1113,8 @@ export class VideosService implements OnModuleInit {
         this.downloadProcesses.delete(id);
         const rateLimited = /account has been rate-limited by YouTube|rate-limited.{0,40}(?:hour|minute)|HTTP Error 429|Too Many Requests/i.test(stderr);
         if (rateLimited) this.rateLimitedDownloads.add(id);
+        if (!ok) this.downloadErrors.set(id, stderr || reason);
+        this.persistedProgress.delete(id);
         if (!ok && !rateLimited && !this.pausedIds.has(id)) {
           try { await this.recordFailure(id, stderr || reason); }
           catch (error) { console.error(`Faallog opslaan mislukt voor ${id}: ${String(error)}`); }

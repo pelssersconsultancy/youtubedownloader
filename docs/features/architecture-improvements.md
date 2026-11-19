@@ -17,11 +17,13 @@ The app now uses `/app-data/config/library.db` for its JSON-shaped settings, cha
 - The FTS5 index is maintained as video metadata changes and is used to find indexed video matches. Some results may still use the file-based fallback until the catalog is fully normalized. [SQLite FTS5 documentation](https://www.sqlite.org/fts5.html)
 - Each future schema upgrade makes a timestamped `VACUUM INTO` backup before applying changes. Database backups and first-import file backups are stored under `config/migration-backups/`.
 
-### 2. Make download and subtitle jobs durable and recoverable
+### 2. Make download and subtitle jobs durable and recoverable — core implemented
 
-Store each video download and subtitle fetch as a job with a stable ID and explicit state, such as `pending`, `running`, `retry_wait`, `completed`, `failed`, or `skipped`.
+Video and subtitle work now has durable per-video jobs with explicit `pending`, `running`, `retry_wait`, `completed`, `failed`, or `skipped` states. The version 2 database migration adds attempts, retry time, progress, error details, and error category; it creates a database backup before upgrading. A running job returns to the queue after restart. Video downloads and subtitle fetches retain independent jobs and failure handling.
 
-Record attempt count, last error category, creation and update times, and the next eligible retry time. At startup, return jobs left in `running` to a retryable state. Use idempotent job creation so rescanning a channel cannot add duplicate work. Keep video and subtitle jobs independent.
+Queue insertion is idempotent. Temporary network failures and YouTube rate limits use bounded retries with exponential delay and jitter. Permanent access failures are recorded as skipped or failed and are not automatically requeued by channel auto-sync. Selecting a failed video for a manual download explicitly resets its job. The sync page shows retry countdowns for videos and the number of subtitle jobs waiting to retry.
+
+Follow-up work: show richer error details in the UI, review error classification against real yt-dlp logs, and add automated restart/retry recovery checks to CI.
 
 ### 3. Centralize yt-dlp process management and error handling
 
