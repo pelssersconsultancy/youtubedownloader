@@ -51,18 +51,16 @@ The download pump checks for at least 512 MB of free space before starting each 
 
 `GET /api/health` returns `{ status, checks: { config, downloads, database } }`. It uses `statfsSync` to confirm the config and download filesystems are reachable and a `SELECT 1` to confirm the database is responsive. The endpoint returns 503 when any check fails. Both Dockerfiles now include a `HEALTHCHECK` that calls this endpoint via Node's built-in `fetch` every 30 seconds.
 
-### 7. Split the backend into focused services
+### 7. Split the backend into focused services — implemented
 
-`VideosService` currently coordinates catalog storage, channel scans, queues, yt-dlp processes, subtitles, failure logs, and sync state. Separate those responsibilities into focused components, for example:
+The 1099-line `VideosService` has been split into two focused services:
 
-- Video catalog and search
-- Channel bookmarks and scans
-- Download job orchestration
-- Subtitle job orchestration
-- yt-dlp process runner
-- Storage and migrations
+- **`ChannelService`** (327 lines) — owns channel bookmarks and CRUD, channel scans, `listChannel` streaming, background metadata enrichment, video catalog saves, Dutch keyword translation, `searchVideos`, and cookie configuration. It is independently injectable and testable without the download queue.
+- **`VideosService`** (821 lines) — owns settings, download job orchestration, subtitle job orchestration, state/health, and lifecycle. It injects `ChannelService` and delegates channel-facing controller routes to it, while handling orchestration concerns such as enqueuing after a scan or reprioritizing the queue after a channel reorder.
 
-This makes failures easier to isolate and lets each component be tested without running the complete app.
+The two pre-existing services remain: `YtdlpRunner` (spawning and process lifecycle) and `AppStorage` (SQLite and migrations).
+
+Key design decisions: `ChannelService` holds cookie config state directly (env vars + `updateCookiesBrowser` for runtime updates). Methods that cross both concerns — `setChannelAutoSync`, `getChannelVideoPage`, `reorderChannels` — stay in `VideosService` as orchestration. No circular dependencies between the services.
 
 ### 8. Strengthen release checks and operational visibility
 

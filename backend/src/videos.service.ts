@@ -1,52 +1,32 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { mkdirSync, statfsSync } from 'fs';
-import { readFile, readdir } from 'fs/promises';
+import { readdir } from 'fs/promises';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
-import { createHash } from 'node:crypto';
 import { AppStorage } from './app-storage.ts';
 import { YtdlpRunner } from './yt-dlp-runner.ts';
+import { ChannelService, type VideoInfo } from './channel.service.ts';
 
-export interface VideoInfo {
-  id: string;
-  title: string;
-  thumbnail: string;
-  duration: number | null;
-  keywords: string[];
-  keywordsEnglish: string[];
-  keywordsDutch: string[];
-}
+export type { VideoInfo, ChannelBookmark, ChannelSuggestion, ChannelSuggestionSubsection, ChannelSuggestionSection } from './channel.service.ts';
 
 const ID_RE = /^[A-Za-z0-9_-]{11}$/;
 // Bestandsnaam: "Titel [videoId].mp4" (zie output-template hieronder)
 const FILE_ID_RE = /\[([A-Za-z0-9_-]{11})\]\.[^.]+$/;
-export interface ChannelBookmark { url: string; title: string; addedAt: string; autoSync: boolean; }
-export interface ChannelSuggestion { title: string; url: string; verified: boolean; }
-export interface ChannelSuggestionSubsection { title: string; channels: ChannelSuggestion[]; }
-export interface ChannelSuggestionSection { title: string; subsections: ChannelSuggestionSubsection[]; }
 
 @Injectable()
 export class VideosService implements OnModuleInit, OnModuleDestroy {
   private static readonly MAX_JOB_ATTEMPTS = 5;
-  private static readonly MAX_ENRICHMENT = 2;
   private static readonly COOKIE_BROWSERS = ['chrome', 'chromium', 'firefox', 'safari', 'edge', 'brave', 'opera', 'vivaldi', 'whale'] as const;
   private readonly dataDir = process.env.APP_DATA_DIR
     ? resolve(process.env.APP_DATA_DIR)
     : join(homedir(), '.youtubedownloader');
   private readonly settingsPath = join(this.dataDir, 'settings.json');
-  private readonly catalogPath = join(this.dataDir, 'videos.json');
-  private readonly channelsPath = join(this.dataDir, 'channels.json');
-  private readonly channelCacheDir = join(this.dataDir, 'channel-cache');
   private readonly queuePath = join(this.dataDir, 'sync-queue.json');
   private readonly subtitleQueuePath = join(this.dataDir, 'subtitle-queue.json');
   private readonly rateLimitPath = join(this.dataDir, 'rate-limit.json');
   private readonly failureLogPath = join(this.dataDir, 'sync-failures.log');
-  private readonly suggestionsPath = process.env.SUGGESTIONS_PATH ?? resolve(process.cwd(), '../docs/skills/suggestions.json');
   private configuredDir: string | null = null;
   private readonly defaultDownloadDir = process.env.DOWNLOAD_DIR ? resolve(process.env.DOWNLOAD_DIR) : null;
-  private cookiesBrowser: string = process.env.YTDLP_COOKIES_BROWSER ?? 'chrome';
-  private readonly cookiesFile = process.env.YTDLP_COOKIES_FILE;
-  private readonly useBrowserCookies = process.env.YTDLP_USE_BROWSER_COOKIES !== 'false';
   private language: 'en' | 'nl' = 'en';
 
   private queue: string[] = [];
@@ -68,19 +48,18 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
   private failed = new Set<string>();
   private readonly downloaded = new Set<string>();
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
-  private enrichmentActive = 0;
   private queueWrite = Promise.resolve();
   private subtitleQueueWrite = Promise.resolve();
   private failureLogWrite = Promise.resolve();
-  private channelScans = new Map<string, Promise<VideoInfo[]>>();
   private subtitleDownloads = new Map<string, { promise: Promise<void>; resolve: () => void }>();
   private subtitleAttempts = new Set<string>();
-  private channelVideoCache = new Map<string, VideoInfo[]>();
 
-  constructor(private readonly storage: AppStorage, private readonly runner: YtdlpRunner) {
-    mkdirSync(this.dataDir, { recursive: true });
+  constructor(
+    private readonly storage: AppStorage,
+    private readonly runner: YtdlpRunner,
+    private readonly channelService: ChannelService,
+  ) {
     if (this.defaultDownloadDir) mkdirSync(this.defaultDownloadDir, { recursive: true });
-    if (process.env.DEEPL_AUTH_KEY) void this.backfillDutchKeywords();
   }
 
   async onModuleInit() {
@@ -133,10 +112,11 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
 
   private async scanBookmarkedChannelsOnStartup() {
     if (!this.configuredDir) return;
-    for (const channel of await this.getChannels()) {
+    for (const channel of await this.channelService.getChannels()) {
       if (!channel.autoSync) continue;
       try {
-        await this.scanChannel(channel.url, true);
+        const videos = await this.channelService.scanChannel(channel.url);
+        await this.enqueue(videos.map((v) => v.id));
       } catch (error) {
         console.error(`Kanaalscan mislukt voor ${channel.url}: ${String(error)}`);
       }
@@ -162,14 +142,16 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
     if (Number.isInteger(saved.maxParallelDownloads) && saved.maxParallelDownloads! >= 1) {
       this.maxParallelDownloads = Math.min(saved.maxParallelDownloads!, 8);
     }
-    if (saved.cookiesBrowser && VideosService.COOKIE_BROWSERS.includes(saved.cookiesBrowser as typeof VideosService.COOKIE_BROWSERS[number])) this.cookiesBrowser = saved.cookiesBrowser;
+    if (saved.cookiesBrowser && VideosService.COOKIE_BROWSERS.includes(saved.cookiesBrowser as typeof VideosService.COOKIE_BROWSERS[number])) {
+      this.channelService.updateCookiesBrowser(saved.cookiesBrowser);
+    }
     if (typeof saved.syncEnabled === 'boolean') this.syncEnabled = saved.syncEnabled;
     if (saved.language === 'en' || saved.language === 'nl') this.language = saved.language;
     return {
       downloadDir: this.configuredDir,
       downloadDirFixed: !!this.defaultDownloadDir,
       maxParallelDownloads: this.maxParallelDownloads,
-      cookiesBrowser: this.cookiesBrowser,
+      cookiesBrowser: this.channelService.cookiesBrowser,
       syncEnabled: this.syncEnabled,
       language: this.language,
     };
@@ -179,7 +161,7 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
     return {
       downloadDir,
       maxParallelDownloads: this.maxParallelDownloads,
-      cookiesBrowser: this.cookiesBrowser,
+      cookiesBrowser: this.channelService.cookiesBrowser,
       syncEnabled: this.syncEnabled,
       language: this.language,
     };
@@ -196,15 +178,9 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
     if (!VideosService.COOKIE_BROWSERS.includes(browser as typeof VideosService.COOKIE_BROWSERS[number])) {
       throw new BadRequestException('Kies een ondersteunde browser');
     }
-    this.cookiesBrowser = browser;
+    this.channelService.updateCookiesBrowser(browser);
     await this.persist(this.settingsPath, this.settingsData(this.configuredDir));
     return this.getSettings();
-  }
-
-  private get cookieArgs() {
-    if (this.cookiesFile) return ['--cookies', this.cookiesFile];
-    if (!this.useBrowserCookies) return [];
-    return ['--cookies-from-browser', this.cookiesBrowser];
   }
 
   async setSyncEnabled(enabled: boolean) {
@@ -253,76 +229,40 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
     return this.getSettings();
   }
 
-  async getChannels(): Promise<ChannelBookmark[]> {
-    try {
-      const channels = this.storage.readJson<Array<Partial<ChannelBookmark> & Pick<ChannelBookmark, 'url' | 'title' | 'addedAt'>>>(this.channelsPath);
-      return channels.map((channel) => ({ ...channel, autoSync: channel.autoSync === true }));
-    }
-    catch { return []; }
-  }
+  getChannels() { return this.channelService.getChannels(); }
 
-  async getSuggestions(): Promise<ChannelSuggestionSection[]> {
-    const data = JSON.parse(await readFile(this.suggestionsPath, 'utf8')) as { sections: ChannelSuggestionSection[] };
-    return data.sections;
-  }
+  getSuggestions() { return this.channelService.getSuggestions(); }
 
-  async addChannel(channelUrl: string) {
-    const parsed = this.parseChannelUrl(channelUrl);
-    const url = parsed.href;
-    const channels = await this.getChannels();
-    if (channels.some((channel) => channel.url === url)) throw new ConflictException('Dit kanaal is al toegevoegd');
-    channels.push({ url, title: this.channelTitle(parsed), addedAt: new Date().toISOString(), autoSync: false });
-    await this.persist(this.channelsPath, channels);
-    void this.scanChannel(url, false).catch((error) => console.error(`Kanaalscan mislukt voor ${url}: ${String(error)}`));
-    return { channels };
+  addChannel(channelUrl: string) { return this.channelService.addChannel(channelUrl); }
+
+  removeChannel(channelUrl: string) { return this.channelService.removeChannel(channelUrl); }
+
+  listChannel(channelUrl: string) { return this.channelService.listChannel(channelUrl); }
+
+  async reorderChannels(urls: string[]) {
+    const result = await this.channelService.reorderChannels(urls);
+    await this.prioritizeQueue();
+    await this.saveQueue();
+    return result;
   }
 
   async setChannelAutoSync(channelUrl: string, enabled: boolean) {
-    const channels = await this.getChannels();
-    const channel = channels.find((entry) => entry.url === channelUrl);
-    if (!channel) throw new NotFoundException('Kanaalbookmark niet gevonden');
-    channel.autoSync = enabled;
-    await this.persist(this.channelsPath, channels);
+    const channels = await this.channelService.setAutoSync(channelUrl, enabled);
     if (!enabled) return { channels, scanned: 0, queued: 0 };
-    const videos = await this.scanChannel(channelUrl, true);
+    const videos = await this.channelService.scanChannel(channelUrl);
+    await this.enqueue(videos.map((v) => v.id));
     const state = await this.getState();
-    return { channels: await this.getChannels(), scanned: videos.length, queued: state.queued.length };
-  }
-
-  private channelCachePath(url: string) {
-    const id = createHash('sha256').update(url).digest('hex');
-    return join(this.channelCacheDir, `${id}.json`);
-  }
-
-  private async saveChannelCache(url: string, videos: VideoInfo[]) {
-    mkdirSync(this.channelCacheDir, { recursive: true });
-    this.channelVideoCache.set(url, videos);
-    await this.persist(this.channelCachePath(url), videos);
-  }
-
-  private async scanChannel(url: string, enqueueVideos: boolean) {
-    const existing = this.channelScans.get(url);
-    let scan = existing;
-    if (!scan) {
-      scan = (async () => {
-      const videos = await this.listChannel(url);
-      await this.saveChannelCache(url, videos);
-      return videos;
-      })();
-      this.channelScans.set(url, scan);
-      void scan.then(() => this.channelScans.delete(url), () => this.channelScans.delete(url));
-    }
-    const videos = await scan;
-    if (enqueueVideos) await this.enqueue(videos.map((video) => video.id));
-    return videos;
+    return { channels: await this.channelService.getChannels(), scanned: videos.length, queued: state.queued.length };
   }
 
   async getChannelVideoPage(url: string, offset = 0, limit = 20) {
-    const bookmark = (await this.getChannels()).find((channel) => channel.url === url);
+    const bookmark = (await this.channelService.getChannels()).find((channel) => channel.url === url);
     if (!bookmark) throw new NotFoundException('Kanaalbookmark niet gevonden');
-    const videos = await this.getCachedChannelVideos(url);
+    const videos = await this.channelService.getCachedChannelVideos(url);
     if (!videos) {
-      void this.scanChannel(url, bookmark.autoSync).catch((error) => console.error(`Kanaalscan mislukt voor ${url}: ${String(error)}`));
+      void this.channelService.scanChannel(url).then(async (vids) => {
+        if (bookmark.autoSync) await this.enqueue(vids.map((v) => v.id));
+      }).catch((error) => console.error(`Kanaalscan mislukt voor ${url}: ${String(error)}`));
       return { items: [], total: 0, offset, hasMore: false, scanning: true };
     }
     const safeOffset = Math.max(0, Math.floor(offset));
@@ -336,24 +276,14 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async getCachedChannelVideos(url: string): Promise<VideoInfo[] | null> {
-    const cached = this.channelVideoCache.get(url);
-    if (cached) return cached;
-    try {
-      const videos = this.storage.readJson<VideoInfo[]>(this.channelCachePath(url));
-      this.channelVideoCache.set(url, videos);
-      return videos;
-    } catch { return null; }
-  }
-
   async getChannelProgress() {
-    const channels = await this.getChannels();
+    const channels = await this.channelService.getChannels();
     const downloaded = this.downloaded;
     const queued = new Set(this.queue);
     const active = new Map(this.active);
     const results = [];
     for (const channel of channels) {
-      const videos = await this.getCachedChannelVideos(channel.url);
+      const videos = await this.channelService.getCachedChannelVideos(channel.url);
       const activeItems: Array<VideoInfo & { progress: number }> = [];
       const queuedItems: VideoInfo[] = [];
       const failedItems: VideoInfo[] = [];
@@ -394,11 +324,8 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async recordFailure(id: string, details: string) {
-    let title = id;
-    try {
-      const catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath);
-      title = catalog[id]?.title ?? id;
-    } catch { /* The video ID still identifies the failed item. */ }
+    const meta = this.storage.getVideoTitles([id]);
+    const title = meta.get(id)?.title ?? id;
     const detailLines = details.split(/\r?\n/).filter(Boolean).slice(-80);
     const entry = [
       `[${new Date().toISOString()}] FAILED ${title} [${id}]`,
@@ -411,33 +338,12 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
     await this.failureLogWrite;
   }
 
-  async removeChannel(channelUrl: string) {
-    const channels = (await this.getChannels()).filter((channel) => channel.url !== channelUrl);
-    await this.persist(this.channelsPath, channels);
-    return channels;
-  }
-
-  async reorderChannels(urls: string[]) {
-    const channels = await this.getChannels();
-    if (!Array.isArray(urls) || urls.length !== channels.length || new Set(urls).size !== channels.length) {
-      throw new BadRequestException('De kanaalvolgorde is ongeldig');
-    }
-    const byUrl = new Map(channels.map((channel) => [channel.url, channel]));
-    const reordered = urls.map((url) => byUrl.get(url));
-    if (reordered.some((channel) => !channel)) throw new BadRequestException('De kanaalvolgorde bevat onbekende kanalen');
-    const result = reordered as ChannelBookmark[];
-    await this.persist(this.channelsPath, result);
-    await this.prioritizeQueue();
-    await this.saveQueue();
-    return result;
-  }
-
   private async prioritizeQueue() {
     if (this.queue.length < 2) return;
-    const channels = await this.getChannels();
+    const channels = await this.channelService.getChannels();
     const priority = new Map<string, number>();
     for (const [rank, channel] of channels.entries()) {
-      const videos = await this.getCachedChannelVideos(channel.url);
+      const videos = await this.channelService.getCachedChannelVideos(channel.url);
       for (const video of videos ?? []) {
         const existing = priority.get(video.id);
         if (existing === undefined || rank < existing) priority.set(video.id, rank);
@@ -448,19 +354,6 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
       (priority.get(a) ?? Number.MAX_SAFE_INTEGER) - (priority.get(b) ?? Number.MAX_SAFE_INTEGER)
       || originalOrder.get(a)! - originalOrder.get(b)!,
     );
-  }
-
-  private parseChannelUrl(channelUrl: string) {
-    let parsed: URL;
-    try { parsed = new URL(channelUrl); }
-    catch { throw new BadRequestException('Ongeldige URL'); }
-    if (!/(^|\.)youtube\.com$/.test(parsed.hostname)) throw new BadRequestException('Alleen youtube.com-links zijn toegestaan');
-    return parsed;
-  }
-
-  private channelTitle(url: URL) {
-    const finalPart = url.pathname.split('/').filter(Boolean).filter((part) => !['videos', 'streams', 'shorts'].includes(part)).at(-1);
-    return finalPart ? decodeURIComponent(finalPart) : url.hostname;
   }
 
   private retryDelay(errorClass: string, attempts: number) {
@@ -519,65 +412,6 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
     return this.subtitleQueueWrite;
   }
 
-  private async saveVideos(videos: VideoInfo[]) {
-    let catalog: Record<string, VideoInfo> = {};
-    try { catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath); }
-    catch { /* First import. */ }
-    for (const video of videos) {
-      const previous = catalog[video.id];
-      catalog[video.id] = {
-        ...previous,
-        ...video,
-        keywordsEnglish: video.keywordsEnglish?.length ? video.keywordsEnglish : previous?.keywordsEnglish ?? video.keywords,
-        keywordsDutch: video.keywordsDutch?.length ? video.keywordsDutch : previous?.keywordsDutch ?? [],
-        keywords: [...new Set([...(video.keywordsEnglish ?? video.keywords), ...(video.keywordsDutch?.length ? video.keywordsDutch : previous?.keywordsDutch ?? [])])],
-      };
-    }
-    await this.persist(this.catalogPath, catalog);
-  }
-
-  private async withDutchKeywords(videos: VideoInfo[]): Promise<VideoInfo[]> {
-    const authKey = process.env.DEEPL_AUTH_KEY;
-    if (!authKey) return videos;
-    const endpoint = process.env.DEEPL_API_URL ?? 'https://api-free.deepl.com/v2/translate';
-    const translated = [...videos];
-    for (let start = 0; start < videos.length; start += 40) {
-      const batch = videos.slice(start, start + 40);
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { Authorization: `DeepL-Auth-Key ${authKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: batch.map((video) => (video.keywordsEnglish ?? video.keywords).join(', ')),
-          target_lang: 'NL',
-        }),
-      });
-      if (!response.ok) throw new Error(`DeepL gaf HTTP ${response.status}`);
-      const body = await response.json() as { translations?: Array<{ text?: string }> };
-      for (const [index, result] of (body.translations ?? []).entries()) {
-        const keywordsDutch = [...new Set((result.text ?? '').split(',').map((word) => word.trim().toLocaleLowerCase()).filter(Boolean))];
-        const videoIndex = start + index;
-        translated[videoIndex] = {
-          ...batch[index],
-          keywordsDutch,
-          keywords: [...new Set([...batch[index].keywordsEnglish, ...keywordsDutch])],
-        };
-      }
-    }
-    return translated;
-  }
-
-  private async backfillDutchKeywords() {
-    try {
-      const catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath);
-      const pending = Object.values(catalog).filter((video) => !video.keywordsDutch?.length).map((video) => ({
-        ...video,
-        keywordsEnglish: video.keywordsEnglish ?? video.keywords ?? [],
-        keywordsDutch: video.keywordsDutch ?? [],
-      }));
-      if (pending.length) await this.saveVideos(await this.withDutchKeywords(pending));
-    } catch { /* Keep the collection usable if translation is unavailable. */ }
-  }
-
   async searchVideos(query: string, offset = 0, limit = 20) {
     if (!this.downloaded.size) return { items: [], total: 0, offset: 0, hasMore: false };
     const terms = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -615,118 +449,6 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
       offset: safeOffset,
       hasMore: safeOffset + safeLimit < matches.length,
     };
-  }
-
-  private toVideoInfo(j: any): VideoInfo {
-    const title = j.title ?? j.id;
-    const sourceTerms = [
-      title,
-      ...(Array.isArray(j.tags) ? j.tags : []),
-      ...(Array.isArray(j.categories) ? j.categories : []),
-      j.description ?? '',
-    ].join(' ');
-    const terms = sourceTerms.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [];
-    return {
-      id: j.id,
-      title,
-      thumbnail: `https://i.ytimg.com/vi/${j.id}/mqdefault.jpg`,
-      duration: typeof j.duration === 'number' ? j.duration : null,
-      keywords: [...new Set(terms)].slice(0, 100),
-      keywordsEnglish: [...new Set(terms)].slice(0, 100),
-      keywordsDutch: [],
-    };
-  }
-
-  private isMembersOnly(info: any) {
-    return String(info?.availability ?? '').toLocaleLowerCase() === 'subscriber_only';
-  }
-
-  /** Enrich flat playlist results in the background so the UI can show the channel quickly. */
-  private async enrichChannelMetadata(target: string) {
-    if (this.enrichmentActive >= VideosService.MAX_ENRICHMENT) return;
-    this.enrichmentActive++;
-    let batch: VideoInfo[] = [];
-    let writes = Promise.resolve();
-    const saveBatch = (videos: VideoInfo[]) => {
-      writes = writes.then(async () => {
-        try { await this.saveVideos(await this.withDutchKeywords(videos)); }
-        catch { /* Keep the fast import metadata if enrichment or translation fails. */ }
-      });
-    };
-    const { result } = this.runner.run([
-      '--skip-download', '--dump-json', '--ignore-errors', '--no-warnings',
-      '--sleep-requests', '2',
-      ...this.cookieArgs,
-      target,
-    ], {
-      onLine: (line) => {
-        if (!line.trim()) return;
-        try {
-          const info = JSON.parse(line);
-          if (this.isMembersOnly(info)) return;
-          const video = this.toVideoInfo(info);
-          if (!ID_RE.test(video.id)) return;
-          batch.push(video);
-          if (batch.length >= 40) {
-            const ready = batch;
-            batch = [];
-            saveBatch(ready);
-          }
-        } catch { /* Ignore malformed metadata lines and continue the scan. */ }
-      },
-    });
-    try {
-      await result;
-      if (batch.length) saveBatch(batch);
-      await writes;
-    } finally {
-      this.enrichmentActive--;
-    }
-  }
-
-  async listChannel(channelUrl: string): Promise<VideoInfo[]> {
-    const u = this.parseChannelUrl(channelUrl);
-    const isPlaylist = u.pathname.startsWith('/playlist');
-    const hasTab = /\/(videos|streams|shorts)\/?$/.test(u.pathname);
-    const target = isPlaylist || hasTab ? u.href : u.href.replace(/\/$/, '') + '/videos';
-
-    const collected: VideoInfo[] = [];
-    let batch: VideoInfo[] = [];
-    let hadOutput = false;
-    let saves = Promise.resolve<void>(undefined);
-    const flushBatch = () => {
-      if (!batch.length) return;
-      const ready = batch;
-      batch = [];
-      saves = saves.then(() => this.saveVideos(ready).catch(() => undefined));
-    };
-
-    const { result } = this.runner.run([
-      '--skip-download', '--flat-playlist', '--dump-json', '--no-warnings',
-      '--sleep-requests', '2',
-      ...this.cookieArgs,
-      target,
-    ], {
-      onLine: (line) => {
-        if (!line.trim()) return;
-        try {
-          const j = JSON.parse(line);
-          if (!ID_RE.test(j.id) || this.isMembersOnly(j)) return;
-          hadOutput = true;
-          const video = this.toVideoInfo(j);
-          collected.push(video);
-          batch.push(video);
-          if (batch.length >= 50) flushBatch();
-        } catch { /* Ignore malformed lines and continue. */ }
-      },
-    });
-
-    const { ok, stderr } = await result;
-    if (!ok && !hadOutput) throw new BadRequestException(stderr.trim() || 'yt-dlp is mislukt');
-    flushBatch();
-    await saves;
-    void this.enrichChannelMetadata(target);
-    return collected;
   }
 
   private async scanDownloadDir(): Promise<string[]> {
@@ -875,7 +597,7 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
       '--sub-langs', 'en.*,nl.*',
       '--sub-format', 'vtt/best',
       '--convert-subs', 'vtt',
-      ...this.cookieArgs,
+      ...this.channelService.cookieArgs,
       '-o', join(this.downloadDir, '%(title)s [%(id)s].%(ext)s'),
       `https://www.youtube.com/watch?v=${id}`,
     ]);
@@ -1068,7 +790,7 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
       '--retry-sleep', 'http:exp=5:60',
       '-f', 'bv*[height<=1080]+ba/b[height<=1080]',
       '--merge-output-format', 'mp4',
-      ...this.cookieArgs,
+      ...this.channelService.cookieArgs,
       '-o', join(this.downloadDir, '%(title)s [%(id)s].%(ext)s'),
       `https://www.youtube.com/watch?v=${id}`,
     ], {
