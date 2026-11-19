@@ -25,7 +25,7 @@ ENV NODE_ENV=production \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg nginx python3 python3-venv supervisor ca-certificates \
     && python3 -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir yt-dlp \
+    && /opt/venv/bin/pip install --no-cache-dir "yt-dlp[default]" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /etc/nginx/sites-enabled/default
