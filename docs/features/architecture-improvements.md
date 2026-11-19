@@ -75,6 +75,20 @@ Key design decisions: `ChannelService` holds cookie config state directly (env v
 
 Follow-up work: add queue-recovery tests using a temporary data directory and a fake yt-dlp process; add structured JSON log lines for the key failure events.
 
+### 9. Refactor the Angular frontend to proper structure — implemented
+
+The 2946-line god component has been split into a proper Angular application with routing, services, and feature components:
+
+- **Models** (`core/models/`): `video.model.ts`, `channel.model.ts`, `settings.model.ts` — typed interfaces extracted from the monolith.
+- **API services** (`core/services/`): `VideoApiService`, `ChannelApiService`, `SettingsApiService`, `SyncApiService` — all HTTP calls encapsulated, one service per backend domain.
+- **`AppStateService`** (`core/services/app-state.service.ts`) — shared state singleton: `state` signal (download queue, 2 s poll), `language`, `channels`, `settingsLoaded`, `storageLocationFixed`. Feature components inject this instead of duplicating the polling logic.
+- **Feature components** (`features/`): `OverviewComponent`, `ChannelsComponent`, `SuggestionsComponent`, `SyncProgressComponent`, `ChannelImportComponent` — each owns its own template, CSS, and local signals.
+- **Angular Router**: `app.routes.ts` wires up five routes (`/overview`, `/channels`, `/suggestions`, `/sync`, `/channel?url=…`). The URL now reflects the current page; navigating to a channel sets `?url=` as a query param so the back-button works correctly.
+- **CSS cleanup**: Two conflicting stylesheets (light/dark responsive + sci-fi dark override, ~1540 lines each in one component) merged into one coherent design. Shared utilities (button, input, ul, .count, .error) live in `styles.css`; the sci-fi theme variables and layout CSS live in `AppComponent`; each feature component has only its page-specific CSS.
+- **`AppComponent`** reduced to a shell: sidebar navigation, settings panel (gateway before first save), and `<router-outlet>`.
+
+`main.ts` updated to add `provideRouter(routes)` alongside `provideHttpClient()`.
+
 ## Suggested implementation sequence
 
 1. Add queue and recovery tests using a temporary data directory and a fake yt-dlp process.
