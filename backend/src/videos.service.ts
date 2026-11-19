@@ -1023,7 +1023,7 @@ export class VideosService implements OnModuleInit {
     this.downloadPumpTimer.unref?.();
   }
 
-  private run(id: string): Promise<boolean> {
+  private async run(id: string): Promise<boolean> {
     const { result, kill } = this.runner.run([
       '--no-playlist', '--newline',
       '--sleep-requests', '2',
@@ -1048,18 +1048,17 @@ export class VideosService implements OnModuleInit {
       },
     });
     this.downloadKills.set(id, kill);
-    return result.then(async ({ ok, stderr, timedOut }) => {
-      this.downloadKills.delete(id);
-      const reason = timedOut ? 'yt-dlp timeout overschreden' : `yt-dlp sloot af met een fout`;
-      const rateLimited = /account has been rate-limited by YouTube|rate-limited.{0,40}(?:hour|minute)|HTTP Error 429|Too Many Requests/i.test(stderr);
-      if (rateLimited) this.rateLimitedDownloads.add(id);
-      if (!ok) this.downloadErrors.set(id, stderr || reason);
-      this.persistedProgress.delete(id);
-      if (!ok && !rateLimited && !this.pausedIds.has(id)) {
-        try { await this.recordFailure(id, stderr || reason); }
-        catch (error) { console.error(`Faallog opslaan mislukt voor ${id}: ${String(error)}`); }
-      }
-      return ok;
-    });
+    const { ok, stderr, timedOut } = await result;
+    this.downloadKills.delete(id);
+    const reason = timedOut ? 'yt-dlp timeout overschreden' : 'yt-dlp sloot af met een fout';
+    const rateLimited = /account has been rate-limited by YouTube|rate-limited.{0,40}(?:hour|minute)|HTTP Error 429|Too Many Requests/i.test(stderr);
+    if (rateLimited) this.rateLimitedDownloads.add(id);
+    if (!ok) this.downloadErrors.set(id, stderr || reason);
+    this.persistedProgress.delete(id);
+    if (!ok && !rateLimited && !this.pausedIds.has(id)) {
+      try { await this.recordFailure(id, stderr || reason); }
+      catch (error) { console.error(`Faallog opslaan mislukt voor ${id}: ${String(error)}`); }
+    }
+    return ok;
   }
 }
