@@ -1,11 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 import { mkdirSync } from 'fs';
-import { appendFile, readFile, readdir, rename, writeFile } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
+import { AppStorage } from './app-storage.ts';
 
 export interface VideoInfo {
   id: string;
@@ -71,7 +72,7 @@ export class VideosService implements OnModuleInit {
   private subtitleAttempts = new Set<string>();
   private channelVideoCache = new Map<string, VideoInfo[]>();
 
-  constructor() {
+  constructor(private readonly storage: AppStorage) {
     mkdirSync(this.dataDir, { recursive: true });
     if (this.defaultDownloadDir) mkdirSync(this.defaultDownloadDir, { recursive: true });
     if (process.env.DEEPL_AUTH_KEY) void this.backfillDutchKeywords();
@@ -80,19 +81,19 @@ export class VideosService implements OnModuleInit {
   async onModuleInit() {
     await this.getSettings();
     try {
-      const savedQueue = JSON.parse(await readFile(this.queuePath, 'utf8')) as string[];
+      const savedQueue = this.storage.readJson<string[]>(this.queuePath);
       const downloaded = new Set(await this.downloadedIds());
       this.queue = [...new Set(savedQueue.filter((id) => ID_RE.test(id) && !downloaded.has(id)))];
       await this.saveQueue();
     } catch { /* No pending sync work yet. */ }
     try {
-      const savedSubtitleQueue = JSON.parse(await readFile(this.subtitleQueuePath, 'utf8')) as string[];
+      const savedSubtitleQueue = this.storage.readJson<string[]>(this.subtitleQueuePath);
       const downloaded = new Set(await this.downloadedIds());
       this.subtitleQueue = [...new Set(savedSubtitleQueue.filter((id) => ID_RE.test(id) && downloaded.has(id)))];
       await this.saveSubtitleQueue();
     } catch { /* Subtitle work is queued after a video has completed. */ }
     try {
-      const savedRetryAt = JSON.parse(await readFile(this.rateLimitPath, 'utf8')) as { retryAt?: number };
+      const savedRetryAt = this.storage.readJson<{ retryAt?: number }>(this.rateLimitPath);
       if (typeof savedRetryAt.retryAt === 'number' && savedRetryAt.retryAt > Date.now()) {
         this.downloadNextRunAt = savedRetryAt.retryAt;
       }
@@ -122,7 +123,7 @@ export class VideosService implements OnModuleInit {
       downloadDir?: string; maxParallelDownloads?: number; cookiesBrowser?: string; syncEnabled?: boolean; language?: string;
     } = {};
     try {
-      saved = JSON.parse(await readFile(this.settingsPath, 'utf8')) as typeof saved;
+      saved = this.storage.readJson<typeof saved>(this.settingsPath);
     } catch { /* First run: use defaults. */ }
 
     if (this.defaultDownloadDir) {
@@ -229,7 +230,7 @@ export class VideosService implements OnModuleInit {
 
   async getChannels(): Promise<ChannelBookmark[]> {
     try {
-      const channels = JSON.parse(await readFile(this.channelsPath, 'utf8')) as Array<Partial<ChannelBookmark> & Pick<ChannelBookmark, 'url' | 'title' | 'addedAt'>>;
+      const channels = this.storage.readJson<Array<Partial<ChannelBookmark> & Pick<ChannelBookmark, 'url' | 'title' | 'addedAt'>>>(this.channelsPath);
       return channels.map((channel) => ({ ...channel, autoSync: channel.autoSync === true }));
     }
     catch { return []; }
@@ -314,7 +315,7 @@ export class VideosService implements OnModuleInit {
     const cached = this.channelVideoCache.get(url);
     if (cached) return cached;
     try {
-      const videos = JSON.parse(await readFile(this.channelCachePath(url), 'utf8')) as VideoInfo[];
+      const videos = this.storage.readJson<VideoInfo[]>(this.channelCachePath(url));
       this.channelVideoCache.set(url, videos);
       return videos;
     } catch { return null; }
@@ -362,7 +363,7 @@ export class VideosService implements OnModuleInit {
   async getFailureLog(limit = 1000) {
     const safeLimit = Math.min(1000, Math.max(1, Math.floor(limit)));
     try {
-      const lines = (await readFile(this.failureLogPath, 'utf8')).split(/\r?\n/).filter(Boolean);
+      const lines = this.storage.readText(this.failureLogPath).split(/\r?\n/).filter(Boolean);
       return { lines: lines.slice(-safeLimit), totalLines: lines.length };
     } catch { return { lines: [], totalLines: 0 }; }
   }
@@ -370,7 +371,7 @@ export class VideosService implements OnModuleInit {
   private async recordFailure(id: string, details: string) {
     let title = id;
     try {
-      const catalog = JSON.parse(await readFile(this.catalogPath, 'utf8')) as Record<string, VideoInfo>;
+      const catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath);
       title = catalog[id]?.title ?? id;
     } catch { /* The video ID still identifies the failed item. */ }
     const detailLines = details.split(/\r?\n/).filter(Boolean).slice(-80);
@@ -380,9 +381,7 @@ export class VideosService implements OnModuleInit {
       '',
     ].join('\n');
     this.failureLogWrite = this.failureLogWrite.catch(() => undefined).then(async () => {
-      await appendFile(this.failureLogPath, entry, 'utf8');
-      const lines = (await readFile(this.failureLogPath, 'utf8')).split(/\r?\n/).filter(Boolean);
-      if (lines.length > 1000) await writeFile(this.failureLogPath, `${lines.slice(-1000).join('\n')}\n`, 'utf8');
+      this.storage.appendFailure(entry);
     });
     await this.failureLogWrite;
   }
@@ -445,9 +444,7 @@ export class VideosService implements OnModuleInit {
   }
 
   private async persist(path: string, data: unknown) {
-    const temporaryPath = `${path}.tmp`;
-    await writeFile(temporaryPath, JSON.stringify(data, null, 2), 'utf8');
-    await rename(temporaryPath, path);
+    this.storage.writeJson(path, data);
   }
 
   private saveQueue() {
@@ -465,7 +462,7 @@ export class VideosService implements OnModuleInit {
 
   private async saveVideos(videos: VideoInfo[]) {
     let catalog: Record<string, VideoInfo> = {};
-    try { catalog = JSON.parse(await readFile(this.catalogPath, 'utf8')) as Record<string, VideoInfo>; }
+    try { catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath); }
     catch { /* First import. */ }
     for (const video of videos) {
       const previous = catalog[video.id];
@@ -512,7 +509,7 @@ export class VideosService implements OnModuleInit {
 
   private async backfillDutchKeywords() {
     try {
-      const catalog = JSON.parse(await readFile(this.catalogPath, 'utf8')) as Record<string, VideoInfo>;
+      const catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath);
       const pending = Object.values(catalog).filter((video) => !video.keywordsDutch?.length).map((video) => ({
         ...video,
         keywordsEnglish: video.keywordsEnglish ?? video.keywords ?? [],
@@ -524,7 +521,7 @@ export class VideosService implements OnModuleInit {
 
   async searchVideos(query: string, offset = 0, limit = 20) {
     let catalog: Record<string, VideoInfo> = {};
-    try { catalog = JSON.parse(await readFile(this.catalogPath, 'utf8')) as Record<string, VideoInfo>; }
+    try { catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath); }
     catch { /* Existing downloaded files can still be listed from their filenames. */ }
     let downloaded: Set<string>;
     let localVideos: VideoInfo[] = [];
@@ -544,7 +541,9 @@ export class VideosService implements OnModuleInit {
       if (downloaded.has(video.id)) merged.set(video.id, video);
     }
     const terms = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    const indexedMatches = new Set(this.storage.searchVideoIds(query));
     const matches = [...merged.values()].filter((video) => {
+      if (indexedMatches.has(video.id)) return true;
       const searchable = `${video.title} ${video.keywords.join(' ')}`.toLocaleLowerCase();
       return terms.every((term) => searchable.includes(term));
     });
@@ -844,7 +843,7 @@ export class VideosService implements OnModuleInit {
 
   async getState() {
     let catalog: Record<string, VideoInfo> = {};
-    try { catalog = JSON.parse(await readFile(this.catalogPath, 'utf8')) as Record<string, VideoInfo>; }
+    try { catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath); }
     catch { /* Show the id if metadata has not been collected yet. */ }
     const describe = (id: string, progress: number) => ({
       id,

@@ -17,7 +17,9 @@
    - **Volumes:** map one folder on your computer to the container path `/app-data`.
 5. Click **Run**, then open [http://localhost:8080](http://localhost:8080).
 
-The app automatically creates `config/` and `downloads/` inside that folder. Settings, channels, and metadata go in `config/`; videos and subtitles go in `downloads/`. You do not need to create these two subfolders yourself.
+The app automatically creates `config/` and `downloads/` inside that folder. The SQLite database, settings, channels, queues, and video metadata go in `config/`; videos and subtitles go in `downloads/`. You do not need to create these two subfolders yourself.
+
+On first startup with an existing data folder, the app imports its JSON configuration into `config/library.db`. Before importing, it creates a timestamped recovery copy under `config/migration-backups/` and leaves the original files untouched. Older JSON files located directly in the mounted `app-data/` folder are also detected and imported when the new `config/` folder is empty. Startup stops with an error if the import cannot be validated; correct the source data or restore the saved copy before restarting.
 
 ### Host path examples
 
@@ -30,4 +32,4 @@ Create or select only the main folder; the app will create `config` and `downloa
 
 ## Update the image
 
-Run the `docker pull` command above again using **Terminal**. Then stop and remove the old container, and start the updated image with the same port and folder mapping.
+Run the `docker pull` command above using **Terminal**, then stop and remove the old container. Run the updated image with the same port and `/app-data` host-folder mapping. The new container runs any pending database migrations automatically at startup. Each schema upgrade first creates a timestamped copy of the database under `config/migration-backups/`. Pulling the image alone does not run the migration; it runs when you start a container from that image. Keep using the same host folder so the database and downloads persist.

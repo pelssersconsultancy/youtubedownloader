@@ -1,6 +1,6 @@
 # Architecture Improvement Proposals
 
-This document records proposed improvements for reliability, performance, and fault recovery. It describes recommendations only; it does not imply that they have been implemented.
+This document tracks reliability, performance, and fault-recovery improvements. Items below identify which foundations have been implemented and which follow-up work remains.
 
 ## Context and design direction
 
@@ -8,14 +8,14 @@ The application currently runs as a local, single-user Docker app. Optimize for 
 
 ## Prioritized improvements
 
-### 1. Move application data from JSON files to SQLite
+### 1. Store application data in SQLite — foundation implemented
 
-Use one SQLite database under `/app-data/config` for video metadata, channel bookmarks, settings, failure records, and job state. Keep the actual video and subtitle files under `/app-data/downloads`.
+The app now uses `/app-data/config/library.db` for its JSON-shaped settings, channel data, queues, cached channel results, failure log, and video catalog. It also maintains normalized video and channel tables, a durable job-state table, an error-event table, schema history, and an FTS5 index over video titles and English/Dutch keywords. Actual video and subtitle files remain under `/app-data/downloads`.
 
-- Use transactions for related updates so a crash cannot leave the catalog and queue out of sync.
-- Add schema migrations and make them safe to run at startup.
-- Import existing JSON files during migration, preserve the originals, and create a backup before changing data.
-- Add an FTS5 index for English and Dutch keywords so collection searches and paged results do not require loading the full catalog into memory. [SQLite FTS5 documentation](https://www.sqlite.org/fts5.html)
+- Writes to the database and its search index use transactions. Versioned migrations include checksums, run before the API starts, and reject unknown future versions or modified migration history.
+- On first startup, JSON configuration in `config/` and legacy JSON at the mounted `app-data/` root are backed up and imported transactionally. Source files are not deleted. Import validation checks JSON, imported documents, and SQLite integrity before recording completion.
+- The FTS5 index is maintained as video metadata changes and is used to find indexed video matches. Some results may still use the file-based fallback until the catalog is fully normalized. [SQLite FTS5 documentation](https://www.sqlite.org/fts5.html)
+- Each future schema upgrade makes a timestamped `VACUUM INTO` backup before applying changes. Database backups and first-import file backups are stored under `config/migration-backups/`.
 
 ### 2. Make download and subtitle jobs durable and recoverable
 
@@ -77,7 +77,7 @@ Pin the yt-dlp version used in each image build, then update it through a delibe
 
 1. Add queue and recovery tests using a temporary data directory and a fake yt-dlp process.
 2. Add startup storage validation, graceful shutdown, and bounded yt-dlp output handling.
-3. Introduce SQLite with migrations and import the existing JSON data without deleting the originals.
+3. Normalize channel-video relationships and queue jobs fully into relational tables; currently compatibility documents are also retained in SQLite.
 4. Move video and subtitle queues into SQLite and add error-specific retry policies.
 5. Move catalog pagination and search onto indexed database queries; add bounded channel streaming.
 6. Split the large service and add CI checks and container health reporting.
