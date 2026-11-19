@@ -62,11 +62,18 @@ The two pre-existing services remain: `YtdlpRunner` (spawning and process lifecy
 
 Key design decisions: `ChannelService` holds cookie config state directly (env vars + `updateCookiesBrowser` for runtime updates). Methods that cross both concerns — `setChannelAutoSync`, `getChannelVideoPage`, `reorderChannels` — stay in `VideosService` as orchestration. No circular dependencies between the services.
 
-### 8. Strengthen release checks and operational visibility
+### 8. Strengthen release checks and operational visibility — implemented
 
-Before a Docker image is published, run backend and frontend checks, queue-recovery tests, and a container smoke test. Add structured logs with video ID, channel, job ID, attempt number, and error category. Provide health information for storage, yt-dlp availability, queue sizes, and the most recent successful sync.
+**CI and release gates:** A reusable `checks.yml` workflow runs the backend TypeScript check, backend build, frontend build, and a container smoke test (builds the backend Docker image and verifies the API responds within 50 s). `ci.yml` triggers these checks on every push to non-main branches and on pull requests. `publish-docker.yml` runs the same checks before publishing, so a broken build can never reach the registry.
 
-Pin the yt-dlp version used in each image build, then update it through a deliberate scheduled or reviewed workflow. This makes releases reproducible while still allowing timely updates when YouTube changes.
+**yt-dlp version pinning:** Both Dockerfiles now install a specific yt-dlp version via `ARG YTDLP_VERSION=<date>`. An `update-ytdlp.yml` workflow runs every Monday: it fetches the latest version from PyPI and opens a pull request to bump the ARG in both Dockerfiles when a new release is available. This keeps builds reproducible while allowing deliberate, reviewed updates.
+
+**Health endpoint enhancements:** `GET /api/health` now includes:
+- `checks.ytdlp` — whether the yt-dlp binary exists at the configured path
+- `queue` — current counts for `queued`, `active`, and `failed` download jobs
+- `lastSyncAt` — ISO timestamp of the most recently completed video download (from the jobs table), or `null` if none
+
+Follow-up work: add queue-recovery tests using a temporary data directory and a fake yt-dlp process; add structured JSON log lines for the key failure events.
 
 ## Suggested implementation sequence
 

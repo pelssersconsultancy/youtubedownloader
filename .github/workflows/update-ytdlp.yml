@@ -1,0 +1,55 @@
+name: Update yt-dlp version
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest yt-dlp version
+        id: latest
+        run: |
+          VERSION=$(curl -s https://pypi.org/pypi/yt-dlp/json | jq -r '.info.version')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Latest yt-dlp: ${VERSION}"
+
+      - name: Get current pinned version
+        id: current
+        run: |
+          VERSION=$(grep -m1 'ARG YTDLP_VERSION=' Dockerfile | cut -d= -f2)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Current yt-dlp: ${VERSION}"
+
+      - name: Update Dockerfiles
+        if: steps.latest.outputs.version != steps.current.outputs.version
+        run: |
+          NEW="${{ steps.latest.outputs.version }}"
+          sed -i "s/ARG YTDLP_VERSION=.*/ARG YTDLP_VERSION=${NEW}/" Dockerfile
+          sed -i "s/ARG YTDLP_VERSION=.*/ARG YTDLP_VERSION=${NEW}/" backend/Dockerfile
+          echo "Updated to ${NEW}"
+
+      - name: Create pull request
+        if: steps.latest.outputs.version != steps.current.outputs.version
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "Update yt-dlp to ${{ steps.latest.outputs.version }}"
+          title: "Update yt-dlp ${{ steps.current.outputs.version }} → ${{ steps.latest.outputs.version }}"
+          body: |
+            Automated update of the pinned yt-dlp version.
+
+            - **From:** `${{ steps.current.outputs.version }}`
+            - **To:** `${{ steps.latest.outputs.version }}`
+
+            See the [yt-dlp changelog](https://github.com/yt-dlp/yt-dlp/blob/master/Changelog.md) for details.
+          branch: update/ytdlp-${{ steps.latest.outputs.version }}
+          delete-branch: true
+          labels: dependencies

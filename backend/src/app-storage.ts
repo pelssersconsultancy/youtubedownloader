@@ -451,4 +451,11 @@ export class AppStorage {
         next_attempt_at: number | null; last_error: string | null; error_class: string | null; progress: number;
       }>;
   }
+
+  getLastVideoCompletedAt(): string | null {
+    const row = this.database.prepare(
+      "SELECT updated_at FROM jobs WHERE kind='video' AND status='completed' ORDER BY updated_at DESC LIMIT 1",
+    ).get() as { updated_at: string } | undefined;
+    return row?.updated_at ?? null;
+  }
 }

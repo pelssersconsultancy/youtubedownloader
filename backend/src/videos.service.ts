@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
-import { mkdirSync, statfsSync } from 'fs';
+import { existsSync, mkdirSync, statfsSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
@@ -389,10 +389,18 @@ export class VideosService implements OnModuleInit, OnModuleDestroy {
     const configOk = this.fsAccessible(this.dataDir);
     const downloadOk = this.configuredDir ? this.fsAccessible(this.configuredDir) : null;
     const dbOk = this.storage.isAlive();
-    if (!configOk || !dbOk || downloadOk === false) {
-      throw new ServiceUnavailableException({ status: 'degraded', checks: { config: configOk, downloads: downloadOk, database: dbOk } });
+    const ytdlpPath = process.env.YTDLP_PATH;
+    const ytdlpOk = ytdlpPath ? existsSync(ytdlpPath) : true;
+    const checks = { config: configOk, downloads: downloadOk, database: dbOk, ytdlp: ytdlpOk };
+    if (!configOk || !dbOk || downloadOk === false || !ytdlpOk) {
+      throw new ServiceUnavailableException({ status: 'degraded', checks });
     }
-    return { status: 'ok', checks: { config: configOk, downloads: downloadOk, database: dbOk } };
+    return {
+      status: 'ok',
+      checks,
+      queue: { queued: this.queue.length, active: this.active.size, failed: this.failed.size },
+      lastSyncAt: this.storage.getLastVideoCompletedAt(),
+    };
   }
 
   private async persist(path: string, data: unknown) {

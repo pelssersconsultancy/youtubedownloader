@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - master
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml

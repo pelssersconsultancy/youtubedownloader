@@ -8,6 +8,7 @@ COPY docs/skills/suggestions.json ./suggestions.json
 RUN pnpm run build
 
 FROM node:24-bookworm-slim AS runtime
+ARG YTDLP_VERSION=2024.12.23
 ENV NODE_ENV=production \
     HOME=/app-data/config \
     APP_DATA_DIR=/app-data/config \
@@ -17,7 +18,7 @@ ENV NODE_ENV=production \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg python3 python3-venv ca-certificates \
     && python3 -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir "yt-dlp[default]" \
+    && /opt/venv/bin/pip install --no-cache-dir "yt-dlp[default]==${YTDLP_VERSION}" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
