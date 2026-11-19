@@ -331,6 +331,25 @@ export class AppStorage {
     return row.content;
   }
 
+  getVideosByIds(ids: string[]): Map<string, { id: string; title: string; thumbnail: string; duration: number | null; keywords: string[]; keywordsEnglish: string[]; keywordsDutch: string[] }> {
+    if (!ids.length) return new Map();
+    const marks = ids.map(() => '?').join(',');
+    const rows = this.database.prepare(`SELECT id,title,thumbnail,duration,keywords_english,keywords_dutch,keywords FROM videos WHERE id IN (${marks})`).all(...ids) as Array<{ id: string; title: string; thumbnail: string; duration: number | null; keywords_english: string; keywords_dutch: string; keywords: string }>;
+    return new Map(rows.map((row) => [row.id, {
+      id: row.id, title: row.title, thumbnail: row.thumbnail, duration: row.duration,
+      keywords: JSON.parse(row.keywords) as string[],
+      keywordsEnglish: JSON.parse(row.keywords_english) as string[],
+      keywordsDutch: JSON.parse(row.keywords_dutch) as string[],
+    }]));
+  }
+
+  getVideoTitles(ids: string[]): Map<string, { title: string; thumbnail: string }> {
+    if (!ids.length) return new Map();
+    const marks = ids.map(() => '?').join(',');
+    const rows = this.database.prepare(`SELECT id, title, thumbnail FROM videos WHERE id IN (${marks})`).all(...ids) as Array<{ id: string; title: string; thumbnail: string }>;
+    return new Map(rows.map((row) => [row.id, { title: row.title, thumbnail: row.thumbnail }]));
+  }
+
   searchVideoIds(query: string): string[] {
     const terms = query.toLocaleLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [];
     if (!terms.length) return [];

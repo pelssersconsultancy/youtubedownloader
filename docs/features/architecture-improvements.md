@@ -31,14 +31,13 @@ A single `YtdlpRunner` service (injected into `VideosService`) now handles all f
 
 The runner provides one `run(args, opts)` method. Stderr is bounded by a configurable byte limit. Stdout can be streamed line-by-line (enrichment), buffered (channel listing), or tracked for progress percentages (video downloads). Every call returns a typed `kill()` function; download kills are stored per video-id so sync-pause can stop only active downloads. Error classification (`classifyError`) lives in the runner and covers rate limits, permanent access failures, temporary 403s, transient network errors, and non-retryable failures — consistent across all job types.
 
-### 4. Reduce repeated file and catalog work
+### 4. Reduce repeated file and catalog work — implemented
 
-The current state endpoint reads and parses the video catalog, while downloaded-video checks scan the download directory. The frontend polls state every two seconds, so this work repeats frequently as the collection grows.
+The state endpoint is no longer I/O-bound on each two-second poll. An in-memory `downloaded: Set<string>` is populated with one `readdir` scan at startup and updated incrementally as downloads complete. `getState()` reads from this set and performs a single targeted SQLite query (`getVideoTitles`) for the small set of active and queued video IDs, replacing a full catalog JSON load. `enqueue()` and `getChannelProgress()` also use the in-memory set.
 
-- Serve overview and search results with database-backed pagination and indexes.
-- Keep download status in the database and reconcile it with files at startup and periodically, rather than scanning the entire folder for every poll.
-- Return a compact state snapshot or changes since a cursor. Consider server-sent events later if polling becomes a measurable bottleneck.
-- Add limits to concurrent channel scans and metadata enrichment.
+A background timer reconciles the in-memory set with the actual download folder every five minutes, so externally deleted files are detected without blocking the state poll. `searchVideos()` queries the SQLite `videos` table for downloaded IDs and falls back to `readdir` only for the rare case of uncatalogued manually placed files. Metadata enrichment is capped at two concurrent yt-dlp processes.
+
+Follow-up work: return a compact state snapshot or changes since a cursor; consider server-sent events if polling remains a bottleneck at larger collection sizes.
 
 ### 5. Stream large channel scans
 

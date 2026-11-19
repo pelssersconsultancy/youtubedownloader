@@ -28,6 +28,7 @@ export interface ChannelSuggestionSection { title: string; subsections: ChannelS
 @Injectable()
 export class VideosService implements OnModuleInit {
   private static readonly MAX_JOB_ATTEMPTS = 5;
+  private static readonly MAX_ENRICHMENT = 2;
   private static readonly COOKIE_BROWSERS = ['chrome', 'chromium', 'firefox', 'safari', 'edge', 'brave', 'opera', 'vivaldi', 'whale'] as const;
   private readonly dataDir = process.env.APP_DATA_DIR
     ? resolve(process.env.APP_DATA_DIR)
@@ -65,6 +66,9 @@ export class VideosService implements OnModuleInit {
   private syncEnabled = true;
   private pausedIds = new Set<string>();
   private failed = new Set<string>();
+  private readonly downloaded = new Set<string>();
+  private reconcileTimer: ReturnType<typeof setInterval> | null = null;
+  private enrichmentActive = 0;
   private queueWrite = Promise.resolve();
   private subtitleQueueWrite = Promise.resolve();
   private failureLogWrite = Promise.resolve();
@@ -81,22 +85,22 @@ export class VideosService implements OnModuleInit {
 
   async onModuleInit() {
     await this.getSettings();
+    for (const id of await this.scanDownloadDir()) this.downloaded.add(id);
     try {
       const savedQueue = this.storage.readJson<string[]>(this.queuePath);
       for (const id of savedQueue.filter((item) => ID_RE.test(item))) this.storage.ensureJob('video', id);
     } catch { /* No pending sync work yet. */ }
-    const downloaded = new Set(await this.downloadedIds());
     const recoveredVideos = this.storage.recoverJobs('video');
-    for (const id of downloaded) this.storage.completeJob('video', id);
-    this.queue = [...new Set(recoveredVideos.filter((id) => !downloaded.has(id)))];
+    for (const id of this.downloaded) this.storage.completeJob('video', id);
+    this.queue = [...new Set(recoveredVideos.filter((id) => !this.downloaded.has(id)))];
     await this.saveQueue();
     try {
       const savedSubtitleQueue = this.storage.readJson<string[]>(this.subtitleQueuePath);
       for (const id of savedSubtitleQueue.filter((item) => ID_RE.test(item))) this.storage.ensureJob('subtitle', id);
     } catch { /* Subtitle work is queued after a video has completed. */ }
     const recoveredSubtitles = this.storage.recoverJobs('subtitle');
-    this.subtitleQueue = [...new Set(recoveredSubtitles.filter((id) => downloaded.has(id)))];
-    for (const id of recoveredSubtitles.filter((queuedId) => !downloaded.has(queuedId))) {
+    this.subtitleQueue = [...new Set(recoveredSubtitles.filter((id) => this.downloaded.has(id)))];
+    for (const id of recoveredSubtitles.filter((queuedId) => !this.downloaded.has(queuedId))) {
       this.storage.failJob('subtitle', id, 'skipped', 'The source video is no longer present in the downloads folder.', 'source_missing');
     }
     await this.saveSubtitleQueue();
@@ -111,6 +115,8 @@ export class VideosService implements OnModuleInit {
       await this.prioritizeQueue();
       this.pump();
       this.pumpSubtitleQueue();
+      this.reconcileTimer = setInterval(() => void this.reconcileDownloaded(), 5 * 60_000);
+      this.reconcileTimer.unref?.();
       void this.scanBookmarkedChannelsOnStartup();
     }
   }
@@ -332,7 +338,7 @@ export class VideosService implements OnModuleInit {
 
   async getChannelProgress() {
     const channels = await this.getChannels();
-    const downloaded = new Set(await this.downloadedIds());
+    const downloaded = this.downloaded;
     const queued = new Set(this.queue);
     const active = new Map(this.active);
     const results = [];
@@ -543,29 +549,30 @@ export class VideosService implements OnModuleInit {
   }
 
   async searchVideos(query: string, offset = 0, limit = 20) {
-    let catalog: Record<string, VideoInfo> = {};
-    try { catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath); }
-    catch { /* Existing downloaded files can still be listed from their filenames. */ }
-    let downloaded: Set<string>;
-    let localVideos: VideoInfo[] = [];
-    try {
-      const files = await readdir(this.downloadDir);
-      localVideos = files.flatMap((file) => {
-        const id = FILE_ID_RE.exec(file)?.[1];
-        if (!id) return [];
-        const title = file.replace(/\s*\[[A-Za-z0-9_-]{11}\]\.[^.]+$/, '');
-        const keywords = [...new Set(title.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])];
-        return [{ id, title, thumbnail: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`, duration: null, keywords, keywordsEnglish: keywords, keywordsDutch: [] }];
-      });
-      downloaded = new Set(localVideos.map((video) => video.id));
-    } catch { downloaded = new Set(); }
-    const merged = new Map(localVideos.map((video) => [video.id, video]));
-    for (const video of Object.values(catalog)) {
-      if (downloaded.has(video.id)) merged.set(video.id, video);
-    }
+    if (!this.downloaded.size) return { items: [], total: 0, offset: 0, hasMore: false };
     const terms = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
     const indexedMatches = new Set(this.storage.searchVideoIds(query));
-    const matches = [...merged.values()].filter((video) => {
+    // Build the candidate set from the in-memory downloaded list + SQLite metadata.
+    const dbMeta = this.storage.getVideosByIds([...this.downloaded]);
+    // Fall back to readdir only for IDs present on disk but absent from the videos table (manually placed files).
+    const uncatalogued = [...this.downloaded].filter((id) => !dbMeta.has(id));
+    let extraVideos: VideoInfo[] = [];
+    if (uncatalogued.length && this.configuredDir) {
+      try {
+        const files = await readdir(this.downloadDir);
+        const fileMap = new Map(files.flatMap((f) => { const id = FILE_ID_RE.exec(f)?.[1]; return id ? [[id, f]] : []; }));
+        extraVideos = uncatalogued.flatMap((id) => {
+          const file = fileMap.get(id);
+          if (!file) return [];
+          const title = file.replace(/\s*\[[A-Za-z0-9_-]{11}\]\.[^.]+$/, '');
+          const keywords = [...new Set(title.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])];
+          return [{ id, title, thumbnail: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`, duration: null, keywords, keywordsEnglish: keywords, keywordsDutch: [] }];
+        });
+      } catch { /* Skip uncatalogued videos if the download directory is unavailable. */ }
+    }
+    const catalogued: VideoInfo[] = [...dbMeta.values()];
+    const all = [...catalogued, ...extraVideos];
+    const matches = all.filter((video) => {
       if (indexedMatches.has(video.id)) return true;
       const searchable = `${video.title} ${video.keywords.join(' ')}`.toLocaleLowerCase();
       return terms.every((term) => searchable.includes(term));
@@ -606,6 +613,8 @@ export class VideosService implements OnModuleInit {
 
   /** Enrich flat playlist results in the background so the UI can show the channel quickly. */
   private async enrichChannelMetadata(target: string) {
+    if (this.enrichmentActive >= VideosService.MAX_ENRICHMENT) return;
+    this.enrichmentActive++;
     let batch: VideoInfo[] = [];
     let writes = Promise.resolve();
     const saveBatch = (videos: VideoInfo[]) => {
@@ -636,9 +645,13 @@ export class VideosService implements OnModuleInit {
         } catch { /* Ignore malformed metadata lines and continue the scan. */ }
       },
     });
-    await result;
-    if (batch.length) saveBatch(batch);
-    await writes;
+    try {
+      await result;
+      if (batch.length) saveBatch(batch);
+      await writes;
+    } finally {
+      this.enrichmentActive--;
+    }
   }
 
   async listChannel(channelUrl: string): Promise<VideoInfo[]> {
@@ -670,13 +683,18 @@ export class VideosService implements OnModuleInit {
     }
   }
 
-  /** Bron van waarheid is de map zelf: verwijder je een bestand, dan wordt de video weer selecteerbaar. */
-  private async downloadedIds(): Promise<string[]> {
+  private async scanDownloadDir(): Promise<string[]> {
     if (!this.configuredDir) return [];
     const files = await readdir(this.downloadDir);
-    return files
-      .map((f) => FILE_ID_RE.exec(f)?.[1])
-      .filter((id): id is string => !!id);
+    return files.map((f) => FILE_ID_RE.exec(f)?.[1]).filter((id): id is string => !!id);
+  }
+
+  private async reconcileDownloaded() {
+    try {
+      const actual = new Set(await this.scanDownloadDir());
+      for (const id of [...this.downloaded]) if (!actual.has(id)) this.downloaded.delete(id);
+      for (const id of actual) if (!this.downloaded.has(id)) { this.downloaded.add(id); this.storage.completeJob('video', id); }
+    } catch { /* Filesystem unavailable; keep the in-memory set as-is. */ }
   }
 
   async getDownloadedVideoPath(id: string) {
@@ -836,20 +854,19 @@ export class VideosService implements OnModuleInit {
   }
 
   async getState() {
-    let catalog: Record<string, VideoInfo> = {};
-    try { catalog = this.storage.readJson<Record<string, VideoInfo>>(this.catalogPath); }
-    catch { /* Show the id if metadata has not been collected yet. */ }
+    const neededIds = [...new Set([...this.active.keys(), ...this.queue.slice(0, 8)])];
+    const meta = this.storage.getVideoTitles(neededIds);
     const describe = (id: string, progress: number) => ({
       id,
       progress,
-      title: catalog[id]?.title ?? id,
-      thumbnail: catalog[id]?.thumbnail ?? `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+      title: meta.get(id)?.title ?? id,
+      thumbnail: meta.get(id)?.thumbnail ?? `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
     });
     const active = [...this.active.entries()].map(([id, data]) => describe(id, data.progress));
     const queuedItems = this.queue.slice(0, 8).map((id) => describe(id, 0));
     return {
       dir: this.configuredDir ?? '',
-      downloaded: await this.downloadedIds(),
+      downloaded: [...this.downloaded],
       queued: [...this.queue],
       queuedItems,
       retrying: this.storage.jobsByStatus('video', ['retry_wait']).map((job) => ({
@@ -873,11 +890,10 @@ export class VideosService implements OnModuleInit {
   }
 
   async enqueue(ids: string[], allowFailedRetry = false) {
-    const done = new Set(await this.downloadedIds());
     for (const id of ids) {
       if (!ID_RE.test(id))
         throw new BadRequestException(`Ongeldig video-id: ${id}`);
-      if (done.has(id) || this.queue.includes(id) || this.active.has(id))
+      if (this.downloaded.has(id) || this.queue.includes(id) || this.active.has(id))
         continue;
       if (this.failed.has(id) && !allowFailedRetry) continue;
       this.failed.delete(id);
@@ -919,6 +935,7 @@ export class VideosService implements OnModuleInit {
         return false;
       }).then(async (ok) => {
         if (ok) {
+          this.downloaded.add(id);
           this.storage.completeJob('video', id);
           this.downloadErrors.delete(id);
           void this.ensureDownloadedSubtitles(id).catch((error) => {
@@ -944,16 +961,18 @@ export class VideosService implements OnModuleInit {
         } else if (this.pausedIds.has(id)) {
           this.pausedIds.delete(id);
           if (ok) {
+            this.downloaded.add(id);
             this.storage.completeJob('video', id);
             this.queue = this.queue.filter((queuedId) => queuedId !== id);
           } else {
             this.rateLimitedDownloads.delete(id);
-            this.storage.setJobPending('video', id);
-            if (!this.queue.includes(id)) this.queue.unshift(id);
-            await this.downloadedIds().then((done) => {
-              if (done.includes(id)) this.queue = this.queue.filter((queuedId) => queuedId !== id);
-              if (done.includes(id)) this.storage.completeJob('video', id);
-            }).catch(() => undefined);
+            if (this.downloaded.has(id)) {
+              this.storage.completeJob('video', id);
+              this.queue = this.queue.filter((queuedId) => queuedId !== id);
+            } else {
+              this.storage.setJobPending('video', id);
+              if (!this.queue.includes(id)) this.queue.unshift(id);
+            }
           }
         } else if (!ok) {
           const error = this.downloadErrors.get(id) ?? 'Download failed without diagnostic output';
