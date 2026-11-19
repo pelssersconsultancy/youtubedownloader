@@ -14,10 +14,19 @@
 
 4. Open **Images → Local**, zoek op `youtubedownloader` en klik op **Run**. Open **Optional settings** en stel in:
    - **Port:** host `8080` naar container `80`.
-   - **Volumes:** koppel een map op je computer aan `/config` en een map aan `/downloads`.
+   - **Volumes:** koppel één map op je computer aan containerpad `/app-data`.
 5. Klik op **Run** en open [http://localhost:8080](http://localhost:8080).
 
-De map voor `/config` bewaart je instellingen, kanalen en metadata. In `/downloads` komen de video’s en ondertitels. Gebruik dezelfde mappen als je de container later opnieuw aanmaakt, zodat je gegevens behouden blijven.
+De applicatie maakt in die map automatisch `config/` en `downloads/` aan. Instellingen, kanalen en metadata komen in `config/`; video’s en ondertitels in `downloads/`. Je hoeft deze twee submappen dus niet zelf aan te maken.
+
+### Voorbeelden van Host path
+
+Koppel in Docker Desktop de volledige hoofdmap aan `/app-data`:
+
+- **macOS:** Host path `/Users/robbypelssers/Movies/youtubedownloader` → Container path `/app-data`
+- **Windows:** Host path `C:\Users\<jouw-naam>\Videos\youtubedownloader` → Container path `/app-data`
+
+Vervang op Windows `<jouw-naam>` door je Windows-gebruikersnaam. Maak of selecteer alleen de hoofdmap; de app maakt `config` en `downloads` daarin zelf aan. Als je al de mappen `config` en `downloads` naast elkaar hebt, kies dan hun bovenliggende map als Host path. Gebruik bij een volgende container steeds dezelfde hoofdmap om je gegevens te behouden.
 
 ## Image bijwerken
 

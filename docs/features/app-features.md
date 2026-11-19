@@ -6,7 +6,7 @@ This file is the durable product requirements list for the downloader frontend a
 
 - On first startup, require the user to configure the folder where downloaded videos are stored unless the deployment provides a fixed download path.
 - Persist the selected folder on the backend so it remains configured after restarting the app.
-- Let the user change a configurable folder later through a settings gear. In Docker, use the `/downloads` volume configured when creating the container, do not prompt for it again, and explain that changing the host folder requires updating the Docker volume mapping.
+- Let the user change a configurable folder later through a settings gear. In Docker, mount one host folder at `/app-data`, automatically create and use `/app-data/config` and `/app-data/downloads`, do not prompt for the download folder again, and explain that changing the host folder requires updating the Docker volume mapping.
 - Store the setting outside the project folder.
 - Let the user choose English or Dutch in settings; default to English and persist the choice with the other application settings.
 

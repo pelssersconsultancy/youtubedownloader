@@ -9,8 +9,9 @@ RUN pnpm run build
 
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production \
-    HOME=/config \
-    DOWNLOAD_DIR=/downloads \
+    HOME=/app-data/config \
+    APP_DATA_DIR=/app-data/config \
+    DOWNLOAD_DIR=/app-data/downloads \
     SUGGESTIONS_PATH=/app/suggestions.json \
     YTDLP_PATH=/opt/venv/bin/yt-dlp
 RUN apt-get update \
@@ -24,6 +25,7 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/suggestions.json ./suggestions.json
-RUN mkdir -p /config /downloads
+RUN mkdir -p /app-data
+VOLUME ["/app-data"]
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

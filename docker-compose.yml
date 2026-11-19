@@ -4,14 +4,13 @@ services:
     pull_policy: always
     restart: unless-stopped
     environment:
-      HOME: /config
-      APP_DATA_DIR: /config
-      DOWNLOAD_DIR: /downloads
+      HOME: /app-data/config
+      APP_DATA_DIR: /app-data/config
+      DOWNLOAD_DIR: /app-data/downloads
       YTDLP_USE_BROWSER_COOKIES: "false"
       YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-}
       DEEPL_AUTH_KEY: ${DEEPL_AUTH_KEY:-}
     volumes:
-      - ./docker-data:/config
-      - "${VIDEO_LIBRARY_DIR:-./downloads}:/downloads"
+      - "${APP_DATA_HOST_DIR:-./app-data}:/app-data"
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:80"

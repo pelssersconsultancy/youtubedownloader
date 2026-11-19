@@ -73,6 +73,7 @@ export class VideosService implements OnModuleInit {
 
   constructor() {
     mkdirSync(this.dataDir, { recursive: true });
+    if (this.defaultDownloadDir) mkdirSync(this.defaultDownloadDir, { recursive: true });
     if (process.env.DEEPL_AUTH_KEY) void this.backfillDutchKeywords();
   }
 

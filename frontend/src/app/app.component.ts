@@ -162,8 +162,8 @@ const API = '/api';
               @if (storageLocationFixed()) {
                 {{
                   t(
-                    'The video folder is set in Docker Desktop. Container path: /downloads. To change the host folder, update the volume mapping in Docker Desktop.',
-                    'De videomap is ingesteld in Docker Desktop. Containerpad: /downloads. Wijzig de volumekoppeling in Docker Desktop om de map op je computer te veranderen.'
+                    'The video folder is set in Docker Desktop. Container path: /app-data/downloads. To change the host folder, update the volume mapping in Docker Desktop.',
+                    'De videomap is ingesteld in Docker Desktop. Containerpad: /app-data/downloads. Wijzig de volumekoppeling in Docker Desktop om de map op je computer te veranderen.'
                   )
                 }}
               } @else {
