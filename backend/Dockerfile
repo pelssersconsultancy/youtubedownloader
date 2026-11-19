@@ -8,7 +8,7 @@ COPY docs/skills/suggestions.json ./suggestions.json
 RUN pnpm run build
 
 FROM node:24-bookworm-slim AS runtime
-ARG YTDLP_VERSION=2024.12.23
+ARG YTDLP_VERSION=2026.10.26
 ENV NODE_ENV=production \
     HOME=/app-data/config \
     APP_DATA_DIR=/app-data/config \
