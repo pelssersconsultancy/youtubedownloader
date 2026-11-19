@@ -25,17 +25,11 @@ Queue insertion is idempotent. Temporary network failures and YouTube rate limit
 
 Follow-up work: show richer error details in the UI, review error classification against real yt-dlp logs, and add automated restart/retry recovery checks to CI.
 
-### 3. Centralize yt-dlp process management and error handling
+### 3. Centralize yt-dlp process management and error handling — implemented
 
-Use one process runner for channel scans, metadata enrichment, video downloads, and subtitle downloads. It should:
+A single `YtdlpRunner` service (injected into `VideosService`) now handles all four yt-dlp call sites: channel listing, metadata enrichment, video downloads, and subtitle downloads. It owns the binary path, tracks every active child process, and exposes `killAll()` via `OnModuleDestroy` for clean shutdown.
 
-- Capture progress and bounded diagnostic output without accumulating unbounded strings.
-- Apply timeouts, handle termination signals, and clean up child processes during shutdown.
-- Classify errors into transient network failures, YouTube rate limits, access restrictions, unavailable or removed videos, and local storage failures.
-- Retry only recoverable errors with capped exponential backoff and jitter; honor server retry guidance when available.
-- Keep permanent failures out of automatic retry loops while retaining enough diagnostic detail for the failure log.
-
-Treat HTTP 403 as an ambiguous error. It can indicate a temporary YouTube restriction or a version, network, or access problem, so do not apply an unlimited retry policy.
+The runner provides one `run(args, opts)` method. Stderr is bounded by a configurable byte limit. Stdout can be streamed line-by-line (enrichment), buffered (channel listing), or tracked for progress percentages (video downloads). Every call returns a typed `kill()` function; download kills are stored per video-id so sync-pause can stop only active downloads. Error classification (`classifyError`) lives in the runner and covers rate limits, permanent access failures, temporary 403s, transient network errors, and non-retryable failures — consistent across all job types.
 
 ### 4. Reduce repeated file and catalog work
 

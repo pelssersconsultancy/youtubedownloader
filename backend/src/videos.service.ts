@@ -1,12 +1,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { spawn, type ChildProcess } from 'child_process';
 import { mkdirSync } from 'fs';
 import { readFile, readdir } from 'fs/promises';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
-import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
 import { AppStorage } from './app-storage.ts';
+import { YtdlpRunner } from './yt-dlp-runner.ts';
 
 export interface VideoInfo {
   id: string;
@@ -44,7 +43,6 @@ export class VideosService implements OnModuleInit {
   private readonly suggestionsPath = process.env.SUGGESTIONS_PATH ?? resolve(process.cwd(), '../docs/skills/suggestions.json');
   private configuredDir: string | null = null;
   private readonly defaultDownloadDir = process.env.DOWNLOAD_DIR ? resolve(process.env.DOWNLOAD_DIR) : null;
-  private readonly ytdlp = process.env.YTDLP_PATH ?? 'yt-dlp';
   private cookiesBrowser: string = process.env.YTDLP_COOKIES_BROWSER ?? 'chrome';
   private readonly cookiesFile = process.env.YTDLP_COOKIES_FILE;
   private readonly useBrowserCookies = process.env.YTDLP_USE_BROWSER_COOKIES !== 'false';
@@ -62,7 +60,7 @@ export class VideosService implements OnModuleInit {
   private rateLimitedDownloads = new Set<string>();
   private downloadErrors = new Map<string, string>();
   private persistedProgress = new Map<string, number>();
-  private downloadProcesses = new Map<string, ChildProcess>();
+  private downloadKills = new Map<string, () => void>();
   private maxParallelDownloads = 1;
   private syncEnabled = true;
   private pausedIds = new Set<string>();
@@ -75,7 +73,7 @@ export class VideosService implements OnModuleInit {
   private subtitleAttempts = new Set<string>();
   private channelVideoCache = new Map<string, VideoInfo[]>();
 
-  constructor(private readonly storage: AppStorage) {
+  constructor(private readonly storage: AppStorage, private readonly runner: YtdlpRunner) {
     mkdirSync(this.dataDir, { recursive: true });
     if (this.defaultDownloadDir) mkdirSync(this.defaultDownloadDir, { recursive: true });
     if (process.env.DEEPL_AUTH_KEY) void this.backfillDutchKeywords();
@@ -205,7 +203,7 @@ export class VideosService implements OnModuleInit {
     }
     await this.persist(this.settingsPath, this.settingsData(this.configuredDir));
     if (!enabled) {
-      for (const id of this.active.keys()) this.downloadProcesses.get(id)?.kill('SIGTERM');
+      for (const id of this.active.keys()) this.downloadKills.get(id)?.();
     } else {
       await this.prioritizeQueue();
       this.pump();
@@ -449,22 +447,6 @@ export class VideosService implements OnModuleInit {
     return finalPart ? decodeURIComponent(finalPart) : url.hostname;
   }
 
-  private classifyJobError(error: string) {
-    if (/HTTP Error 429|Too Many Requests|rate-limited by YouTube|rate limit/i.test(error)) {
-      return { retryable: true, permanent: false, errorClass: 'rate_limited' };
-    }
-    if (/members.only|subscriber.only|private video|has been removed|video has been removed|this video is not available|video unavailable|no longer available|not available in your country|account has been terminated|channel has been terminated/i.test(error)) {
-      return { retryable: false, permanent: true, errorClass: 'access_unavailable' };
-    }
-    if (/HTTP Error 403|Forbidden/i.test(error)) {
-      return { retryable: true, permanent: false, errorClass: 'access_denied_temporary' };
-    }
-    if (/timed? ?out|timeout|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network|connection (?:reset|closed|refused)|HTTP Error 5\d\d|temporarily unavailable|TLS/i.test(error)) {
-      return { retryable: true, permanent: false, errorClass: 'transient_network' };
-    }
-    return { retryable: false, permanent: false, errorClass: 'non_retryable' };
-  }
-
   private retryDelay(errorClass: string, attempts: number) {
     const base = errorClass === 'rate_limited' ? 60 * 60_000 : 30_000;
     const cap = errorClass === 'rate_limited' ? 6 * 60 * 60_000 : 30 * 60_000;
@@ -624,19 +606,6 @@ export class VideosService implements OnModuleInit {
 
   /** Enrich flat playlist results in the background so the UI can show the channel quickly. */
   private async enrichChannelMetadata(target: string) {
-    const p = spawn(this.ytdlp, [
-      '--skip-download',
-      '--dump-json',
-      '--ignore-errors',
-      '--no-warnings',
-      '--js-runtimes',
-      'node',
-      '--sleep-requests',
-      '2',
-      ...this.cookieArgs,
-      target,
-    ]);
-    const lines = createInterface({ input: p.stdout, crlfDelay: Infinity });
     let batch: VideoInfo[] = [];
     let writes = Promise.resolve();
     const saveBatch = (videos: VideoInfo[]) => {
@@ -645,77 +614,60 @@ export class VideosService implements OnModuleInit {
         catch { /* Keep the fast import metadata if enrichment or translation fails. */ }
       });
     };
-    lines.on('line', (line) => {
-      if (!line.trim()) return;
-      try {
-        const info = JSON.parse(line);
-        if (this.isMembersOnly(info)) return;
-        const video = this.toVideoInfo(info);
-        if (!ID_RE.test(video.id)) return;
-        batch.push(video);
-        if (batch.length >= 40) {
-          const ready = batch;
-          batch = [];
-          saveBatch(ready);
-        }
-      } catch { /* Ignore malformed metadata lines and continue the scan. */ }
+    const { result } = this.runner.run([
+      '--skip-download', '--dump-json', '--ignore-errors', '--no-warnings',
+      '--sleep-requests', '2',
+      ...this.cookieArgs,
+      target,
+    ], {
+      onLine: (line) => {
+        if (!line.trim()) return;
+        try {
+          const info = JSON.parse(line);
+          if (this.isMembersOnly(info)) return;
+          const video = this.toVideoInfo(info);
+          if (!ID_RE.test(video.id)) return;
+          batch.push(video);
+          if (batch.length >= 40) {
+            const ready = batch;
+            batch = [];
+            saveBatch(ready);
+          }
+        } catch { /* Ignore malformed metadata lines and continue the scan. */ }
+      },
     });
-    await new Promise<void>((done) => {
-      p.on('error', () => done());
-      p.on('close', () => done());
-    });
-    lines.close();
+    await result;
     if (batch.length) saveBatch(batch);
     await writes;
   }
 
-  listChannel(channelUrl: string): Promise<VideoInfo[]> {
+  async listChannel(channelUrl: string): Promise<VideoInfo[]> {
     const u = this.parseChannelUrl(channelUrl);
     const isPlaylist = u.pathname.startsWith('/playlist');
     const hasTab = /\/(videos|streams|shorts)\/?$/.test(u.pathname);
-    const target =
-      isPlaylist || hasTab ? u.href : u.href.replace(/\/$/, '') + '/videos';
+    const target = isPlaylist || hasTab ? u.href : u.href.replace(/\/$/, '') + '/videos';
 
-    return new Promise((ok, fail) => {
-      const p = spawn(this.ytdlp, [
-        '--skip-download',
-        '--flat-playlist',
-        '--dump-json',
-        '--no-warnings',
-        '--js-runtimes',
-        'node',
-        '--sleep-requests',
-        '2',
-        ...this.cookieArgs,
-        target,
-      ]);
-      let out = '';
-      let err = '';
-      p.stdout.on('data', (d) => (out += d));
-      p.stderr.on('data', (d) => (err += d));
-      p.on('error', (e) =>
-        fail(new BadRequestException(`yt-dlp niet gevonden: ${e.message}`)),
-      );
-      p.on('close', async (code) => {
-        if (code !== 0 && !out)
-          return fail(
-            new BadRequestException(err.trim() || 'yt-dlp is mislukt'),
-          );
-        const videos: VideoInfo[] = out
-          .split('\n')
-          .filter(Boolean)
-          .map((line) => JSON.parse(line))
-          .filter((j) => ID_RE.test(j.id) && !this.isMembersOnly(j))
-          .map((j) => this.toVideoInfo(j));
-        try {
-          await this.saveVideos(videos);
-          void this.enrichChannelMetadata(target);
-          ok(videos);
-        } catch (error) {
-          fail(new BadRequestException(`Metadata opslaan is mislukt: ${String(error)}`));
-        }
-      });
-    });
+    const { result } = this.runner.run([
+      '--skip-download', '--flat-playlist', '--dump-json', '--no-warnings',
+      '--sleep-requests', '2',
+      ...this.cookieArgs,
+      target,
+    ]);
+    const { ok, stdout, stderr } = await result;
+    if (!ok && !stdout) throw new BadRequestException(stderr.trim() || 'yt-dlp is mislukt');
+    const videos: VideoInfo[] = stdout
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((j) => ID_RE.test(j.id) && !this.isMembersOnly(j))
+      .map((j) => this.toVideoInfo(j));
+    try {
+      await this.saveVideos(videos);
+      void this.enrichChannelMetadata(target);
+      return videos;
+    } catch (error) {
+      throw new BadRequestException(`Metadata opslaan is mislukt: ${String(error)}`);
+    }
   }
 
   /** Bron van waarheid is de map zelf: verwijder je een bestand, dan wordt de video weer selecteerbaar. */
@@ -792,7 +744,7 @@ export class VideosService implements OnModuleInit {
       this.activeSubtitleDownloads.delete(id);
       if (!result.success) {
         const failure = result.error ?? 'Subtitle download failed without diagnostic output';
-        const classification = this.classifyJobError(failure);
+        const classification = this.runner.classifyError(failure);
         const attempts = this.storage.jobAttemptCount('subtitle', id);
         if (classification.retryable && attempts < VideosService.MAX_JOB_ATTEMPTS) {
           const delayMs = this.retryDelay(classification.errorClass, attempts);
@@ -848,49 +800,23 @@ export class VideosService implements OnModuleInit {
     this.subtitlePumpTimer.unref?.();
   }
 
-  private downloadSubtitles(id: string) {
-    return new Promise<{ success: boolean; rateLimited: boolean; error?: string }>((done) => {
-      let stderr = '';
-      let settled = false;
-      const finish = (success: boolean, error = '') => {
-        if (settled) return;
-        settled = true;
-        done({ success, rateLimited: /HTTP Error 429|Too Many Requests/i.test(error), error: error || undefined });
-      };
-      const child = spawn(this.ytdlp, [
-        '--no-playlist',
-        '--skip-download',
-        '--js-runtimes',
-        'node',
-        '--sleep-subtitles',
-        '5',
-        '--retries',
-        '3',
-        '--retry-sleep',
-        'http:exp=5:60',
-        '--sleep-requests',
-        '2',
-        '--write-subs',
-        '--write-auto-subs',
-        '--sub-langs',
-        'en.*,nl.*',
-        '--sub-format',
-        'vtt/best',
-        '--convert-subs',
-        'vtt',
-        ...this.cookieArgs,
-        '-o',
-        join(this.downloadDir, '%(title)s [%(id)s].%(ext)s'),
-        `https://www.youtube.com/watch?v=${id}`,
-      ]);
-      child.stderr.on('data', (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-8000); });
-      child.on('error', (error) => {
-        finish(false, error.message);
-      });
-      child.on('close', (code) => {
-        finish(code === 0, code === 0 ? '' : stderr || `yt-dlp sloot af met code ${code}`);
-      });
-    });
+  private async downloadSubtitles(id: string): Promise<{ success: boolean; error?: string }> {
+    const { result } = this.runner.run([
+      '--no-playlist', '--skip-download',
+      '--sleep-subtitles', '5',
+      '--retries', '3',
+      '--retry-sleep', 'http:exp=5:60',
+      '--sleep-requests', '2',
+      '--write-subs', '--write-auto-subs',
+      '--sub-langs', 'en.*,nl.*',
+      '--sub-format', 'vtt/best',
+      '--convert-subs', 'vtt',
+      ...this.cookieArgs,
+      '-o', join(this.downloadDir, '%(title)s [%(id)s].%(ext)s'),
+      `https://www.youtube.com/watch?v=${id}`,
+    ]);
+    const { ok, stderr } = await result;
+    return { success: ok, error: ok ? undefined : (stderr || undefined) };
   }
 
   async getDownloadedSubtitlePath(id: string, language: string) {
@@ -1031,7 +957,7 @@ export class VideosService implements OnModuleInit {
           }
         } else if (!ok) {
           const error = this.downloadErrors.get(id) ?? 'Download failed without diagnostic output';
-          const classification = this.classifyJobError(error);
+          const classification = this.runner.classifyError(error);
           const attempts = this.storage.jobAttemptCount('video', id);
           if (classification.retryable && attempts < VideosService.MAX_JOB_ATTEMPTS) {
             const delayMs = this.retryDelay(classification.errorClass, attempts);
@@ -1063,66 +989,42 @@ export class VideosService implements OnModuleInit {
   }
 
   private run(id: string): Promise<boolean> {
-    return new Promise((resolveRun) => {
-      let stderr = '';
-      let settled = false;
-      const p = spawn(this.ytdlp, [
-        '--no-playlist',
-        '--newline',
-        '--js-runtimes',
-        'node',
-        '--sleep-requests',
-        '2',
-        '--sleep-interval',
-        '5',
-        '--max-sleep-interval',
-        '10',
-        '--retries',
-        '3',
-        '--retry-sleep',
-        'http:exp=5:60',
-        '-f',
-        'bv*[height<=1080]+ba/b[height<=1080]',
-        '--merge-output-format',
-        'mp4',
-        ...this.cookieArgs,
-        '-o',
-        join(this.downloadDir, '%(title)s [%(id)s].%(ext)s'),
-        `https://www.youtube.com/watch?v=${id}`,
-      ]);
-      this.downloadProcesses.set(id, p);
-      p.stdout.on('data', (d) => {
-        const m = /(\d+(?:\.\d+)?)%/.exec(String(d));
-        if (m && this.active.has(id)) {
-          const progress = Math.round(parseFloat(m[1]));
-          this.active.get(id)!.progress = progress;
-          if (progress === 100 || Math.abs(progress - (this.persistedProgress.get(id) ?? -5)) >= 5) {
-            this.persistedProgress.set(id, progress);
-            this.storage.updateJobProgress(id, progress);
-          }
+    const { result, kill } = this.runner.run([
+      '--no-playlist', '--newline',
+      '--sleep-requests', '2',
+      '--sleep-interval', '5',
+      '--max-sleep-interval', '10',
+      '--retries', '3',
+      '--retry-sleep', 'http:exp=5:60',
+      '-f', 'bv*[height<=1080]+ba/b[height<=1080]',
+      '--merge-output-format', 'mp4',
+      ...this.cookieArgs,
+      '-o', join(this.downloadDir, '%(title)s [%(id)s].%(ext)s'),
+      `https://www.youtube.com/watch?v=${id}`,
+    ], {
+      stderrLimit: 24_000,
+      onProgress: (pct) => {
+        if (!this.active.has(id)) return;
+        this.active.get(id)!.progress = pct;
+        if (pct === 100 || Math.abs(pct - (this.persistedProgress.get(id) ?? -5)) >= 5) {
+          this.persistedProgress.set(id, pct);
+          this.storage.updateJobProgress(id, pct);
         }
-      });
-      p.stderr.on('data', (d) => {
-        stderr += String(d);
-        stderr = stderr.split(/\r?\n/).slice(-100).join('\n');
-        if (stderr.length > 24_000) stderr = stderr.slice(-24_000);
-      });
-      const finish = async (ok: boolean, reason: string) => {
-        if (settled) return;
-        settled = true;
-        this.downloadProcesses.delete(id);
-        const rateLimited = /account has been rate-limited by YouTube|rate-limited.{0,40}(?:hour|minute)|HTTP Error 429|Too Many Requests/i.test(stderr);
-        if (rateLimited) this.rateLimitedDownloads.add(id);
-        if (!ok) this.downloadErrors.set(id, stderr || reason);
-        this.persistedProgress.delete(id);
-        if (!ok && !rateLimited && !this.pausedIds.has(id)) {
-          try { await this.recordFailure(id, stderr || reason); }
-          catch (error) { console.error(`Faallog opslaan mislukt voor ${id}: ${String(error)}`); }
-        }
-        resolveRun(ok);
-      };
-      p.on('error', (error) => void finish(false, error.message));
-      p.on('close', (code) => void finish(code === 0, `yt-dlp sloot af met code ${code}`));
+      },
+    });
+    this.downloadKills.set(id, kill);
+    return result.then(async ({ ok, stderr, timedOut }) => {
+      this.downloadKills.delete(id);
+      const reason = timedOut ? 'yt-dlp timeout overschreden' : `yt-dlp sloot af met een fout`;
+      const rateLimited = /account has been rate-limited by YouTube|rate-limited.{0,40}(?:hour|minute)|HTTP Error 429|Too Many Requests/i.test(stderr);
+      if (rateLimited) this.rateLimitedDownloads.add(id);
+      if (!ok) this.downloadErrors.set(id, stderr || reason);
+      this.persistedProgress.delete(id);
+      if (!ok && !rateLimited && !this.pausedIds.has(id)) {
+        try { await this.recordFailure(id, stderr || reason); }
+        catch (error) { console.error(`Faallog opslaan mislukt voor ${id}: ${String(error)}`); }
+      }
+      return ok;
     });
   }
 }
